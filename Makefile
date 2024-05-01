@@ -39,7 +39,13 @@ C_SOURCES =  \
 Core/Src/main.c \
 Core/Src/system_stm32f1xx.c \
 Core/Src/sysmem.c \
-Core/Src/syscalls.c
+Core/Src/syscalls.c \
+FreeRTOS/FreeRTOS-Kernel/tasks.c \
+FreeRTOS/FreeRTOS-Kernel/list.c \
+FreeRTOS/FreeRTOS-Kernel/timers.c \
+FreeRTOS/FreeRTOS-Kernel/queue.c \
+FreeRTOS/FreeRTOS-Kernel/portable/GCC/ARM_CM3/port.c \
+FreeRTOS/FreeRTOS-Kernel/portable/MemMang/heap_4.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -169,7 +175,7 @@ $(BUILD_DIR):
 #######################################
 # Flash to the chip
 #######################################
-flash:
+flash: $(BUILD_DIR)/$(TARGET).bin
 	st-flash --reset write $(BUILD_DIR)/$(TARGET).bin 0x08000000
 
 #######################################

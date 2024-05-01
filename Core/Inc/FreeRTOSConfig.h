@@ -8,7 +8,7 @@ your application. */
 #define configUSE_PREEMPTION                    1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 #define configUSE_TICKLESS_IDLE                 0
-#define configCPU_CLOCK_HZ                      60000000
+#define configCPU_CLOCK_HZ                      8000000
 #define configSYSTICK_CLOCK_HZ                  1000000
 #define configTICK_RATE_HZ                      250
 #define configMAX_PRIORITIES                    5
@@ -37,12 +37,12 @@ your application. */
 #define configSTATS_BUFFER_MAX_LENGTH           0xFFFF
 
 /* Memory allocation related definitions. */
-#define configSUPPORT_STATIC_ALLOCATION             1
+// #define configSUPPORT_STATIC_ALLOCATION             1
 #define configSUPPORT_DYNAMIC_ALLOCATION            1
 #define configKERNEL_PROVIDED_STATIC_MEMORY         1
-#define configTOTAL_HEAP_SIZE                       10240
-#define configAPPLICATION_ALLOCATED_HEAP            1
-#define configSTACK_ALLOCATION_FROM_SEPARATE_HEAP   1
+#define configTOTAL_HEAP_SIZE                       5120
+// #define configAPPLICATION_ALLOCATED_HEAP            1
+// #define configSTACK_ALLOCATION_FROM_SEPARATE_HEAP   1
 #define configENABLE_HEAP_PROTECTOR                 1
 
 /* Hook function related definitions. */
@@ -68,13 +68,28 @@ your application. */
 #define configTIMER_QUEUE_LENGTH                10
 #define configTIMER_TASK_STACK_DEPTH            configMINIMAL_STACK_SIZE
 
+/* The highest interrupt priority that can be used by any interrupt service
+routine that makes calls to interrupt safe FreeRTOS API functions.  DO NOT CALL
+INTERRUPT SAFE FREERTOS API FUNCTIONS FROM ANY INTERRUPT THAT HAS A HIGHER
+PRIORITY THAN THIS! (higher priorities are lower numeric values. */
+#define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY	10
+
+
+#ifdef __NVIC_PRIO_BITS
+	/* __BVIC_PRIO_BITS will be specified when CMSIS is being used. */
+	#define configPRIO_BITS       		        __NVIC_PRIO_BITS
+#else
+	#define configPRIO_BITS       		        4        /* 15 priority levels */
+#endif
+
 /* Interrupt nesting behaviour configuration. */
-#define configKERNEL_INTERRUPT_PRIORITY         [dependent of processor]
-#define configMAX_SYSCALL_INTERRUPT_PRIORITY    [dependent on processor and application]
-#define configMAX_API_CALL_INTERRUPT_PRIORITY   [dependent on processor and application]
+#define configLIBRARY_LOWEST_INTERRUPT_PRIORITY     0x0f
+#define configKERNEL_INTERRUPT_PRIORITY             ( configLIBRARY_LOWEST_INTERRUPT_PRIORITY << (8 - configPRIO_BITS) )
+#define configMAX_SYSCALL_INTERRUPT_PRIORITY        ( configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY << (8 - configPRIO_BITS) )
 
 /* Define to trap errors during development. */
-#define configASSERT( ( x ) ) if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ )
+// #define configASSERT(x)                         if((x)==0) { vAssertCalled( __FILE__, __LINE__); }
+#define configASSERT( x )                          if( ( x ) == 0 ) { taskDISABLE_INTERRUPTS(); for( ;; ) __asm volatile( "NOP" ); }
 
 /* FreeRTOS MPU specific definitions. */
 #define configINCLUDE_APPLICATION_DEFINED_PRIVILEGED_FUNCTIONS 0
