@@ -19,6 +19,16 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
+#include <FreeRTOS.h>
+#include <task.h>
+
+TaskHandle_t xTaskHandle1 = NULL;
+TaskHandle_t xTaskHandle2 = NULL;
+
+/* The task functions prototype*/
+void vTask1(void *pvParameters);
+void vTask2(void *pvParameters);
+
 void delay(uint32_t ms) {
     // Simple delay function (not accurate, just for demonstration)
     for (volatile uint32_t i = 0; i < ms * 1000; ++i) {
@@ -39,12 +49,41 @@ int main(void)
     GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
 
+    /* Create one of the two tasks. */
+    xTaskCreate(vTask1, "Task-1", configMINIMAL_STACK_SIZE, NULL, 2, &xTaskHandle1);
+    /* Create second task */
+    xTaskCreate(vTask2, "Task-2", configMINIMAL_STACK_SIZE, NULL, 2, &xTaskHandle2);
+
+    /* Start the scheduler */
+    vTaskStartScheduler();
+
     while (1) {
+#if 0
         // Toggle LED pin
         GPIOC->ODR ^= 0x2000;
 
         // Delay for some time
         delay(500);  // Delay 1000 milliseconds (1 second)
+#endif
+    }
+}
+
+void vTask1(void *pvParameters)
+{
+    /* As per most tasks, this task is implemented in an infinite loop. */
+    while(1) {
+        GPIOC->ODR ^= 0x2000;
+        vTaskDelay(500);
+    }
+}
+/*-----------------------------------------------------------*/
+
+void vTask2(void *pvParameters)
+{
+    /* As per most tasks, this task is implemented in an infinite loop. */
+    while(1) {
+        GPIOC->ODR ^= 0x2000;
+        vTaskDelay(200);
     }
 }
 

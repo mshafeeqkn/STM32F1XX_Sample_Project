@@ -100,8 +100,9 @@ AS_INCLUDES =
 C_INCLUDES =  \
 -ICore/Inc \
 -IDrivers/CMSIS/Device/ST/STM32F1xx/Include \
--IDrivers/CMSIS/Include
-
+-IDrivers/CMSIS/Include \
+-IFreeRTOS/FreeRTOS-Kernel/include \
+-IFreeRTOS/FreeRTOS-Kernel/portable/GCC/ARM_CM3
 
 # compile gcc flags
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
