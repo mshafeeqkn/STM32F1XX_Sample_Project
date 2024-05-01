@@ -19,15 +19,32 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
+void delay(uint32_t ms) {
+    // Simple delay function (not accurate, just for demonstration)
+    for (volatile uint32_t i = 0; i < ms * 1000; ++i) {
+        __NOP();  // No operation (compiler barrier)
+    }
+}
+
 /**
   * @brief  The application entry point.
   * @retval int
   */
 int main(void)
 {
+    // Enable clock for GPIOC peripheral
+    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
 
-  while (1)
-  {
-  }
+    // Configure GPIO pin as output
+    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
+    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+
+    while (1) {
+        // Toggle LED pin
+        GPIOC->ODR ^= 0x2000;
+
+        // Delay for some time
+        delay(500);  // Delay 1000 milliseconds (1 second)
+    }
 }
 
