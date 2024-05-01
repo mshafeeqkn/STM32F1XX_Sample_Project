@@ -19,12 +19,48 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
+#define TURN_ON_LED()            turn_led_on(TURN_ON)
+#define TURN_OFF_LED()           turn_led_on(TURN_OFF)
+#define TOGGLE_LED()             turn_led_on(TURN_TOGGLE)
+
+
+typedef enum {
+    TURN_OFF,
+    TURN_ON,
+    TURN_TOGGLE
+} LedState_t;
+
 void delay(uint32_t ms) {
     // Simple delay function (not accurate, just for demonstration)
     for (volatile uint32_t i = 0; i < ms * 1000; ++i) {
         __NOP();  // No operation (compiler barrier)
     }
 }
+
+void turn_led_on(LedState_t state) {
+    if(state == TURN_TOGGLE){
+        GPIOC->ODR ^= GPIO_ODR_ODR13;
+    } else if(state == TURN_ON) {
+        GPIOC->ODR &= ~(GPIO_ODR_ODR13);
+    } else {
+        GPIOC->ODR |= GPIO_ODR_ODR13;
+    }
+}
+
+void setup_timer_2() {
+    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+    TIM2->CR1 |= TIM_CR1_CEN;
+    TIM2->ARR = 0x9C40;
+    TIM2->PSC = (0xC7 * 100);
+
+    while(1) {
+        if(TIM2->SR & TIM_SR_UIF) {
+            TIM2->SR &= ~(TIM_SR_UIF);
+            TOGGLE_LED();
+        }
+    }
+}
+
 
 /**
   * @brief  The application entry point.
@@ -39,12 +75,11 @@ int main(void)
     GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
 
+    TOGGLE_LED();
+    setup_timer_2();
     while (1) {
-        // Toggle LED pin
-        GPIOC->ODR ^= 0x2000;
-
-        // Delay for some time
-        delay(500);  // Delay 1000 milliseconds (1 second)
+        // TOGGLE_LED();
+        // delay(500);
     }
 }
 
