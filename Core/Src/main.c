@@ -22,22 +22,43 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#define TURN_ON_LED()            turn_led_on(TURN_ON)
+#define TURN_OFF_LED()           turn_led_on(TURN_OFF)
+#define TOGGLE_LED()             turn_led_on(TURN_TOGGLE)
+
+typedef enum {
+    TURN_OFF,
+    TURN_ON,
+    TURN_TOGGLE
+} LedState_t;
+
 void delay(uint32_t ms) {
     for (volatile uint32_t i = 0; i < ms * 100; ++i) {
         __NOP();  // No operation (compiler barrier)
     }
 }
 
+void turn_led_on(LedState_t state) {
+    if(state == TURN_TOGGLE){
+        GPIOC->ODR ^= GPIO_ODR_ODR13;
+    } else if(state == TURN_ON) {
+        GPIOC->ODR &= ~(GPIO_ODR_ODR13);
+    } else {
+        GPIOC->ODR |= GPIO_ODR_ODR13;
+    }
+}
+
 void uart1_send_char(char ch) {
-    USART1->DR = ch;
+    TURN_ON_LED();
     while((USART1->SR & USART_SR_TXE) == 0) {}
-    delay(1);
+    USART1->DR = ch;
+    TURN_OFF_LED();
 }
 
 // Function that takes a format string and a variable number of arguments
 void uart1_send_string(const char *format, ...) {
     va_list args;
-    char buffer[100];
+    char buffer[64];
     size_t i, len;
 
     va_start(args, format);
@@ -48,6 +69,9 @@ void uart1_send_string(const char *format, ...) {
     for(i = 0; i < len; i++) {
         uart1_send_char(buffer[i]);
     }
+
+    // Wait until transmission complted
+    while((USART1->SR & USART_SR_TC) == 0) {}
 }
 
 void uart1_setup() {
@@ -82,7 +106,7 @@ int main(void)
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
 
     delay(1000);
-    uart1_send_string("Shafeeque; age = %d\r\nKunnath Naduthodi house\r\nPappinppara\r\nManjeri\r\nMalappuram\r\n", age);
+    uart1_send_string("\r\nShafeeque; age = %d\r\nKunnath Naduthodi house\r\nPappinppara\r\nManjeri\r\nMalappuram\r\n", age);
     while (1) {
     }
 }
