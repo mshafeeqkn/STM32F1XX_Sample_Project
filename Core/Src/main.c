@@ -41,6 +41,13 @@ void delay(uint32_t ms) {
     }
 }
 
+/**
+ * @brief Turn on/off/toggle the built in LED
+ *
+ * @param state - TURN_TOGGLE
+ *                TURN_ON_LED
+ *                TURN_OFF_LED
+ */
 void turn_led_on(LedState_t state) {
     if(state == TURN_TOGGLE){
         GPIOC->ODR ^= GPIO_ODR_ODR13;
@@ -51,12 +58,26 @@ void turn_led_on(LedState_t state) {
     }
 }
 
+void EXTI0_IRQHandler(void)
+{
+    TOGGLE_LED();
+}
+
+/**
+ * @brief Send a byte through the UART1
+ *
+ * @param byte to be sent
+ */
 void uart1_send_byte(uint8_t ch) {
     while((USART1->SR & USART_SR_TXE) == 0) {}
     USART1->DR = ch;
 }
 
-// Function that takes a format string and a variable number of arguments
+/**
+ * @brief Send formatted string through UART1
+ *
+ * @param format - formatted string
+ */
 void uart1_send_string(const char *format, ...) {
     va_list args;
     char buffer[128];
@@ -75,6 +96,12 @@ void uart1_send_string(const char *format, ...) {
     while((USART1->SR & USART_SR_TC) == 0) {}
 }
 
+/**
+ * @brief Setup the UART1 for transmit or recieve
+ *
+ * @param uart_mode - UART_TX_ENABLE, UART_RX_ENABLE
+ *                    or both
+ */
 void uart1_setup(uint8_t uart_mode) {
     uint16_t uart1_cr1_flags = 0;
 
@@ -111,6 +138,9 @@ void uart1_setup(uint8_t uart_mode) {
     USART1->CR1 |= uart1_cr1_flags;
 }
 
+/**
+ * @brief receive a byte from UART1
+ */
 uint8_t uart1_get_byte() {
     uint8_t data;
 
@@ -126,6 +156,14 @@ uint8_t uart1_get_byte() {
     return data;
 }
 
+/**
+ * @brief The function to read the line of data from UART1
+ * The function will return if any \r char detected or
+ * len number of charector received.
+ *
+ * @param buff - The pointer to the buffer
+ * @param len - Maximum buffer length
+ */
 void uart1_get_string(char *buff, size_t len) {
     int i = 0;
     do {
