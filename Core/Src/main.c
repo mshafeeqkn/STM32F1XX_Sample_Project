@@ -53,16 +53,41 @@ void turn_led_on(LedState_t state) {
   */
 int main(void)
 {
-    // Enable clock for GPIOC peripheral
-    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
+    uint8_t i;
+    const uint8_t repeat = 3;
 
-    // Configure GPIO pin as output
-    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+    // Enable clock for GPIOC and GPIOB peripherals
+    RCC->APB2ENR |= (RCC_APB2ENR_IOPCEN | RCC_APB2ENR_IOPBEN);
+
+    // Configure PC13 pin as output push-pull maximum speed 10MHz
+    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);
+    GPIOC->CRH |= GPIO_CRH_MODE13_0;
+
+    // Configure PB0 pin as input pull up or pull down
+    GPIOB->CRL &= ~(GPIO_CRL_CNF0 | GPIO_CRL_MODE0);
+    GPIOB->CRL |= GPIO_CRL_CNF0_1;
+
+    // PBO as pull up
+    GPIOB->ODR |= GPIO_ODR_ODR0;
+
+    // By default the ouptu will be high, turn it off
+    TURN_OFF_LED();
 
     while (1) {
-        TOGGLE_LED();
-        delay(500);
+        // Switch is released by default. On pressing switch
+        // the input will become 0 and exit the loop.
+        while(GPIOB->IDR & GPIO_IDR_IDR0) {}
+
+        // Wait here as long as switch kept as pressed
+        while(!(GPIOB->IDR & GPIO_IDR_IDR0)) {}
+
+        // Blink LED `repeat` times
+        for(i = 0; i < repeat; i++) {
+            TURN_ON_LED();
+            delay(500);
+            TURN_OFF_LED();
+            delay(500);
+        }
     }
 }
 
