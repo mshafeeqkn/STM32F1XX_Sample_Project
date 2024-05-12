@@ -47,12 +47,18 @@ void turn_led_on(LedState_t state) {
     }
 }
 
+void setup_timer_1() {
+    RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+    TIM1->PSC = 0xC7;
+    TIM1->ARR = 0x9C40;
+    TIM1->CR1 |= TIM_CR1_CEN;
+}
+
 /**
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
-{
+int main(void) {
     // Enable clock for GPIOC peripheral
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
 
@@ -60,9 +66,11 @@ int main(void)
     GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
 
-    while (1) {
+    setup_timer_1();
+
+    while(1) {
+        while((TIM1->SR & TIM_SR_UIF) == 0) {}
+        TIM1->SR &= ~(TIM_SR_UIF);
         TOGGLE_LED();
-        delay(500);
     }
 }
-
