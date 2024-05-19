@@ -134,57 +134,64 @@ void turn_led_on(LedState_t state) {
   * @brief  The application entry point.
   * @retval int
   */
-//	adc_init(adc1, PA, 0);
-
 
 int main(void)
 {
-    uint16_t adcDelay = 0xFFF;
+    uint16_t adcDelay1 = 0xFFF;
+    uint16_t adcDelay2 = 0xFFF;
+    uint16_t adcDelay3 = 0xFFF;
 
     uart1_setup(UART_TX_ENABLE);
 
-    // Enable clock for GPIOC & ADC1 peripheral
+    // Enable clock for GPIOA, GPIOC & ADC1 peripheral
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
     RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
     RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
-    RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
 
-    // Configure GPIO pin as output
-    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+    // Configure built in LED as output
+    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);
+    GPIOC->CRH |= GPIO_CRH_MODE13_0;
 
     // GPIOA1 analog input mode
     GPIOA->CRL &= ~(GPIO_CRL_CNF1 | GPIO_CRL_MODE1);
 
-    ADC1->CR2 = 0;
-
-    // ADC channel 1
-    ADC1->SQR1 = 0;
-    ADC1->SQR3 = 1;
+    // Document RM0008 Section 11.3.1
+    // The ADC can be powered-on by setting the ADON bit in the
+    // ADC_CR2 register. When the ADON bit is set for the first
+    // time, it wakes up the ADC from Power Down mode. Conversion
+    // starts when ADON bit is set for a second time by software
+    // after ADC power-up time
+    ADC1->CR2 |= ADC_CR2_ADON;
+    delay(100);
+    ADC1->CR2 |= ADC_CR2_ADON;
 
     // Caliberate ADC after each power up
-    ADC1->CR2 |= ADC_CR2_ADON;
-    // ADC1->CR2 |= ADC_CR2_CAL;
-    // while(ADC1->CR2 & ADC_CR2_CAL);
+    ADC1->CR2 |= ADC_CR2_CAL;
+    while(ADC1->CR2 & ADC_CR2_CAL);
 
-    delay(100);
-
-    // Enable ADC
-    ADC1->CR2 |= ADC_CR2_ADON;
-    ADC1->CR2 |= ADC_CR2_CONT;
-
-    // Start Regular Conversion
-    ADC1->SR &= ~(ADC_SR_EOC);
-
+    // Turn LED off
     TOGGLE_LED();
+
     while (1) {
-        ADC1->CR2 |= ADC_CR2_SWSTART;
-        if(ADC1->SR & ADC_SR_EOC) {
-            adcDelay = ADC1->DR;
-        }
-        // TOGGLE_LED();
-        // delay(adcDelay);
-        uart1_send_string("ADC1 value = %d\r\n", adcDelay);
+        // Get ADC value of channel 1
+        ADC1->SQR3 = 1;                     // Select channel
+        ADC1->CR2 |= ADC_CR2_ADON;          // Enable ADC
+        while(!(ADC1->SR & ADC_SR_EOC));    // Wait until the End Of Conversion flag is set
+        adcDelay1 = ADC1->DR;               // Get the data from ADC Data Register
+
+        // Get ADC value of channel 2
+        ADC1->SQR3 = 2;
+        ADC1->CR2 |= ADC_CR2_ADON;
+        while(!(ADC1->SR & ADC_SR_EOC));
+        adcDelay2 = ADC1->DR;
+
+        // Get ADC value of channel 3
+        ADC1->SQR3 = 3;
+        ADC1->CR2 |= ADC_CR2_ADON;
+        while(!(ADC1->SR & ADC_SR_EOC));
+        adcDelay3 = ADC1->DR;
+
+        uart1_send_string("ADC1 value = %d;%d;%d\r\n", adcDelay1, adcDelay2, adcDelay3);
     }
 }
 
