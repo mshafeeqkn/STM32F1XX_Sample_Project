@@ -28,9 +28,7 @@
 #define TURN_OFF_LED()           turn_led_on(TURN_OFF)
 #define TOGGLE_LED()             turn_led_on(TURN_TOGGLE)
 
-
-#define UART_TX_ENABLE           0x01
-#define UART_RX_ENABLE           0x02
+static volatile uint8_t loopCount = 0;
 
 typedef enum {
     TURN_OFF,
@@ -60,15 +58,13 @@ void turn_led_on(LedState_t state) {
   * @retval int
   */
 
+void ADC1_2_IRQHandler() {
+    uint16_t adcDelay = ADC1->DR;
+    loopCount = adcDelay * 60 / 3500;
+}
+
 int main(void)
 {
-    uint16_t adcDelay1 = 0xFFF;
-    uint16_t adcDelay2 = 0xFFF;
-
-    uint16_t onTime = 0;
-    uint16_t offTime = 0;
-    uint8_t dutyCycle = 0;
-
     // Enable clock for GPIOA, GPIOC & ADC1 peripheral
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
     RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
@@ -96,40 +92,34 @@ int main(void)
     ADC1->CR2 |= ADC_CR2_CAL;
     while(ADC1->CR2 & ADC_CR2_CAL);
 
+    // Select first channel
+    ADC1->SQR3 = 1;
+
+    // Enable end of conversion interrupt
+    __disable_irq();
+    ADC1->CR1 |= ADC_CR1_EOCIE;
+    NVIC_EnableIRQ(ADC1_2_IRQn);
+    __enable_irq();
+
     // Turn LED off
-    TOGGLE_LED();
+    // TOGGLE_LED();
 
     while (1) {
-        // Get ADC value from channel 1
-        ADC1->SQR3 = 1;                     // Select channel
-        ADC1->CR2 |= ADC_CR2_ADON;          // Enable ADC
-        while(!(ADC1->SR & ADC_SR_EOC));    // Wait until the End Of Conversion flag is set
-        adcDelay1 = ADC1->DR;               // Get the data from ADC Data Register
+        ADC1->SR &= ~(ADC_SR_EOC);
+        for(int i = 0; i < loopCount; i++) {
+            if(i < 2) {
+                TOGGLE_LED();
+            }
 
-        // Get ADC value from channel 2
-        ADC1->SQR3 = 2;
-        ADC1->CR2 |= ADC_CR2_ADON;
-        while(!(ADC1->SR & ADC_SR_EOC));
-        adcDelay2 = ADC1->DR;
-
-        dutyCycle = adcDelay1 * 100 / 3600;
-
-        // Work-around to keep dutycycle not more than 100%
-        // Because in some case, the adcDelay1 is going more
-        // than 3600.
-        if(dutyCycle > 100) {
-            dutyCycle = 100;
+            delay(50);
+            ADC1->CR2 |= ADC_CR2_ADON;
         }
 
-        // Calculate the LED on and off time
-        onTime = (adcDelay2 * dutyCycle) / 100;
-        offTime = adcDelay2 - onTime;
-
-        // Toggle
-        TOGGLE_LED();
-        delay(onTime);
-        TOGGLE_LED();
-        delay(offTime);
+        // if the above loop not executed (when loopCount is 0), the
+        // conversion won't start. So start the conversion explicitly
+        if(loopCount <= 1) {
+            ADC1->CR2 |= ADC_CR2_ADON;
+        }
     }
 }
 
