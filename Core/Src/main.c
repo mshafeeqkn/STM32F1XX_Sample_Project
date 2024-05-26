@@ -80,6 +80,7 @@ int main(void)
 
     // GPIOA1 analog input mode
     GPIOA->CRL &= ~(GPIO_CRL_CNF1 | GPIO_CRL_MODE1);
+    GPIOA->CRL &= ~(GPIO_CRL_CNF2 | GPIO_CRL_MODE2);
 
     // Document RM0008 Section 11.3.1
     // The ADC can be powered-on by setting the ADON bit in the
@@ -99,21 +100,23 @@ int main(void)
     TOGGLE_LED();
 
     while (1) {
-        // Get ADC value of channel 1
+        // Get ADC value from channel 1
         ADC1->SQR3 = 1;                     // Select channel
         ADC1->CR2 |= ADC_CR2_ADON;          // Enable ADC
         while(!(ADC1->SR & ADC_SR_EOC));    // Wait until the End Of Conversion flag is set
         adcDelay1 = ADC1->DR;               // Get the data from ADC Data Register
 
-        // Get ADC value of channel 2
+        // Get ADC value from channel 2
         ADC1->SQR3 = 2;
         ADC1->CR2 |= ADC_CR2_ADON;
         while(!(ADC1->SR & ADC_SR_EOC));
         adcDelay2 = ADC1->DR;
 
-        dutyCycle = adcDelay1 / 36;
+        dutyCycle = adcDelay1 * 100 / 3600;
 
         // Work-around to keep dutycycle not more than 100%
+        // Because in some case, the adcDelay1 is going more
+        // than 3600.
         if(dutyCycle > 100) {
             dutyCycle = 100;
         }
