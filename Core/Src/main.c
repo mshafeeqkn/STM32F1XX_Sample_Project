@@ -22,96 +22,17 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
-
+#include "uart.h"
 
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
 #define TURN_OFF_LED()           turn_led_on(TURN_OFF)
 #define TOGGLE_LED()             turn_led_on(TURN_TOGGLE)
-
-
-#define UART_TX_ENABLE           0x01
-#define UART_RX_ENABLE           0x02
 
 typedef enum {
     TURN_OFF,
     TURN_ON,
     TURN_TOGGLE
 } LedState_t;
-
-/**
- * @brief Send a byte through the UART1
- *
- * @param byte to be sent
- */
-void uart1_send_byte(uint8_t ch) {
-    while((USART1->SR & USART_SR_TXE) == 0) {}
-    USART1->DR = ch;
-}
-
-/**
- * @brief Send formatted string through UART1
- *
- * @param format - formatted string
- */
-void uart1_send_string(const char *format, ...) {
-    va_list args;
-    char buffer[128];
-    size_t i, len;
-
-    va_start(args, format);
-    vsprintf(buffer, format, args);
-    va_end(args);
-
-    len = strlen(buffer);
-    for(i = 0; i < len; i++) {
-        uart1_send_byte(buffer[i]);
-    }
-
-    // Wait until transmission complted
-    while((USART1->SR & USART_SR_TC) == 0) {}
-}
-
-/**
- * @brief Setup the UART1 for transmit or recieve
- *
- * @param uart_mode - UART_TX_ENABLE, UART_RX_ENABLE
- *                    or both
- */
-void uart1_setup(uint8_t uart_mode) {
-    uint16_t uart1_cr1_flags = 0;
-
-    // Enable clock to USART1, Alternate function IO and GPIOA
-    RCC->APB2ENR |= (RCC_APB2ENR_USART1EN | RCC_APB2ENR_IOPAEN);
-
-    // Baud rate 2400 @ 8MHz clock frequency
-    USART1->BRR = 0xD05;
-    if(0 != uart_mode) {
-        // Global UART enable if either Tx or Rx enabled.
-        uart1_cr1_flags |= USART_CR1_UE;
-
-        // Enable Transmit mode if required
-        if(uart_mode & UART_TX_ENABLE) {
-            uart1_cr1_flags |= USART_CR1_TE;
-
-            // Configure PA9 as output; 10MHz max; push pull
-            GPIOA->CRH &= ~(GPIO_CRH_CNF9 | GPIO_CRH_MODE9);
-            GPIOA->CRH |= (GPIO_CRH_MODE9_0 | GPIO_CRH_CNF9_1);
-        }
-
-        // Enable Receive mode if required
-        if(uart_mode & UART_RX_ENABLE) {
-            uart1_cr1_flags |= USART_CR1_RE;
-
-            // Configure PA10 input pull-up/pull-down
-            GPIOA->CRH &= ~(GPIO_CRH_CNF10 | GPIO_CRH_MODE10);
-            GPIOA->CRH |= GPIO_CRH_CNF10_1;
-        }
-
-    }
-
-    // Enable UART and required mode
-    USART1->CR1 |= uart1_cr1_flags;
-}
 
 void delay(uint32_t ms) {
     // Simple delay function (not accurate, just for demonstration)
