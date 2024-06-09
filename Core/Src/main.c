@@ -137,7 +137,13 @@ int main(void)
     TOGGLE_LED();
 
     while (1) {
-        uart1_send_string("ADC1 value = %d;%d;%d\r\n", adc_data_buff[0], adc_data_buff[1], adc_data_buff[2]);
+        // uart1_send_string("ADC1 value = %d;%d;%d\r\n", adc_data_buff[0], adc_data_buff[1], adc_data_buff[2]);
+        for(uint8_t i = 0; i < 3; i++) {
+            TOGGLE_LED();
+            delay(adc_data_buff[i]);
+            TOGGLE_LED();
+            delay(adc_data_buff[i]);
+        }
     }
 }
 
