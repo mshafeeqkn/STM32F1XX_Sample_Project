@@ -19,24 +19,25 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
+// Macro defines
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
 #define TURN_OFF_LED()           turn_led_on(TURN_OFF)
 #define TOGGLE_LED()             turn_led_on(TURN_TOGGLE)
 
-
+/**
+ * Enumerations
+ */
 typedef enum {
     TURN_OFF,
     TURN_ON,
     TURN_TOGGLE
 } LedState_t;
 
-void delay(uint32_t ms) {
-    // Simple delay function (not accurate, just for demonstration)
-    for (volatile uint32_t i = 0; i < ms * 1000; ++i) {
-        __NOP();  // No operation (compiler barrier)
-    }
-}
-
+/**
+ * @brief Trun the built in LED on/off/toggle
+ *
+ * @param state - TURN_ON / TURN_OFF / TURN_TOGGLE
+ */
 void turn_led_on(LedState_t state) {
     if(state == TURN_TOGGLE){
         GPIOC->ODR ^= GPIO_ODR_ODR13;
@@ -48,11 +49,29 @@ void turn_led_on(LedState_t state) {
 }
 
 /**
+ * @brief Configure the system clock as 8MHz using
+ * external crystal oscillator.
+ */
+void config_sys_clock() {
+    // Enable HSE (High-Speed External) oscillator
+    RCC->CR |= RCC_CR_HSEON;
+    while ((RCC->CR & RCC_CR_HSERDY) == 0);  // Wait for HSE to be ready
+
+    // Select HSE as the system clock source
+    RCC->CFGR &= ~RCC_CFGR_SW;  // Clear SW bits
+    RCC->CFGR |= RCC_CFGR_SW_HSE;  // Set SW bits to select HSE as system clock
+
+    // Wait until HSE is used as the system clock source
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSE);
+}
+
+/**
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
-{
+int main(void) {
+    config_sys_clock();
+
     // Enable clock for GPIOC peripheral
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
 
@@ -60,9 +79,10 @@ int main(void)
     GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
 
-    while (1) {
+    while(1) {
+        // Wait until the overflow flag is set.
+        while( (TIM1->SR & TIM_SR_UIF) == 0) {}
+        TIM1->SR &= ~(TIM_SR_UIF);
         TOGGLE_LED();
-        delay(500);
     }
 }
-
