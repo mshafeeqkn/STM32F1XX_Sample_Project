@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
 // Macro defines
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
 #define TURN_OFF_LED()           turn_led_on(TURN_OFF)
@@ -66,23 +65,51 @@ void config_sys_clock() {
 }
 
 /**
+ * @brief Setup Timer1 in compare mode.
+ */
+void setup_timer_1_compare() {
+    // Enable clock for Timer1 and GPIOA
+    RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+    RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
+
+    // Set PA8 as alternate function output push-pull
+    GPIOA->CRH &= ~(GPIO_CRH_MODE8|GPIO_CRH_CNF8);
+    GPIOA->CRH |= GPIO_CRH_MODE8_0;
+    GPIOA->CRH |= GPIO_CRH_CNF8_1;
+
+    // Total 4 sec delay for on and off LED
+    TIM1->PSC = 499;
+    TIM1->CCMR1 = 32767;    // no matter the value set here.
+                            // because the match will happen
+                            // once in every 0-65535 only.
+
+    // OC1REF should not clear; preload disable; fast disable
+    TIM1->CCMR1 &= ~(TIM_CCMR1_OC1CE | TIM_CCMR1_OC1PE | TIM_CCMR1_OC1FE);
+
+    // Toggle on comapre match between TIM1_CNT and TIM1_CCMR1
+    TIM1->CCMR1 &= ~(TIM_CCMR1_OC1M);
+    TIM1->CCMR1 |= (TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_0);
+
+    // Enable compare output
+    TIM1->CCMR1 &= ~(TIM_CCMR1_CC1S);
+
+    // Capture compare enable
+    TIM1->CCER |= TIM_CCER_CC1E;
+
+    // Enable PA8 (OC) if corresponding OCxE is set in the CCER register
+    TIM1->BDTR |= TIM_BDTR_MOE;
+
+    // Start the timer
+    TIM1->CR1 |= TIM_CR1_CEN;
+}
+
+/**
   * @brief  The application entry point.
   * @retval int
   */
 int main(void) {
     config_sys_clock();
-
-    // Enable clock for GPIOC peripheral
-    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
-
-    // Configure GPIO pin as output
-    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
-
-    while(1) {
-        // Wait until the overflow flag is set.
-        while( (TIM1->SR & TIM_SR_UIF) == 0) {}
-        TIM1->SR &= ~(TIM_SR_UIF);
-        TOGGLE_LED();
-    }
+    setup_timer_1_compare();
+    while(1) {}
 }
+
