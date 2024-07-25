@@ -35,7 +35,7 @@ typedef enum {
 } LedState_t;
 
 void delay(uint32_t tick) {
-    for (volatile uint32_t i = 0; i < tick * 1; ++i) {
+    for (volatile uint32_t i = 0; i < tick; ++i) {
         __NOP();  // No operation (compiler barrier)
     }
 }
@@ -138,18 +138,44 @@ void i2c_stop() {
     I2C1->CR1 |= I2C_CR1_STOP;
 }
 
+void write_eeprom_data(uint8_t chip, uint8_t addr, uint8_t* data, uint16_t len) {
+    uint16_t i = 0;
+    uint16_t end_addr = addr | 0x0F;
+    uint16_t start = 0;
+    uint16_t end = end_addr - addr + 1;
+
+    while(len) {
+        i2c_start();
+        i2c_addr(chip, 0);
+        i2c_send_byte(addr);
+
+        for(i = start; i < end; i++) {
+            i2c_send_byte(data[i]);
+            len--;
+        }
+
+        i2c_stop();
+        addr += (end - start);
+        start += (end - start);
+        if(len > 16) {
+            end += 16;
+        } else {
+            end += len;
+        }
+
+        if(addr == 0 && chip == 0x50) {
+            chip++;
+        }
+
+        delay(3700);
+    }
+}
+
 int main(void) {
     config_sys_clock();
 
     i2c_init();
-    i2c_start();
-    i2c_addr(CHIP_ADDR, 0);
-    i2c_send_byte(0x00);
-    i2c_send_byte(0x01);
-    i2c_send_byte(0x02);
-    i2c_send_byte(0x03);
-    i2c_send_byte(0x04);
-    i2c_stop();
+    write_eeprom_data(CHIP_ADDR, 0x00, (uint8_t*)"This is a very long string used to test the full memory size of the EEPROM which has the memory size of 512 byte of memory but I am not sure how it works and how to fix this again some dummy data to fill the maximum length of the full memory address right? ok bye again a plenty of data to test the second part of the memory which is automatically updating or not we need to test. This is the aim of the whole program. Next part is we wil write a protram to read the data from the eeprom but why this is not andyyyyy", 512);
 
     while(1) {
     }
