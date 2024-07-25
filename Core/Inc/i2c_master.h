@@ -33,5 +33,6 @@ void i2c_send_byte(uint8_t byte);
 void i2c_stop();
 
 void write_eeprom_data(uint8_t chip, uint8_t addr, uint8_t* data, uint16_t len);
+void read_eeprom_data(uint8_t chip, uint8_t addr, uint8_t* data, uint16_t len);
 
 #endif

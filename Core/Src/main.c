@@ -41,11 +41,21 @@ void config_sys_clock() {
 
 
 int main(void) {
+    uint8_t data[20];
     config_sys_clock();
 
     i2c_init();
-    write_eeprom_data(CHIP_ADDR, 0x00, (uint8_t*)"This is a very long string used to test the full memory size of the EEPROM which has the memory size of 512 byte of memory but I am not sure how it works and how to fix this again some dummy data to fill the maximum length of the full memory address right? ok bye again a plenty of data to test the second part of the memory which is automatically updating or not we need to test. This is the aim of the whole program. Next part is we wil write a protram to read the data from the eeprom but why this is not andyyyyy", 512);
-
+#if 0
+    write_eeprom_data(CHIP_ADDR, 0x00, (uint8_t*)"This is a very long string "
+    "used to test the full memory size of the EEPROM which has the memory size"
+    " of 512 byte of memory but I am not sure how it works and how to fix this"
+    " again some dummy data to fill the maximum length of the full memory address"
+    " right? ok bye again a plenty of data to test the second part of the memory"
+    " which is automatically updating or not we need to test. This is the aim of"
+    " the whole program. Next part is we wil write a protram to read the data"
+    " from the eeprom but why this is not andyyyyy", 512);
+#endif
+    read_eeprom_data(CHIP_ADDR, 0x00, data, 20);
     while(1) {
     }
 }

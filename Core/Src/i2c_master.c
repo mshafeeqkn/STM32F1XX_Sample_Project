@@ -68,6 +68,11 @@ void i2c_start() {
 }
 
 void i2c_addr(uint8_t addr, uint8_t is_read) {
+    // Set ACK flag for receive data
+    if(is_read) {
+        I2C1->CR1 |= I2C_CR1_ACK;
+    }
+
     // Write address into the data register with write/read flag
     // Wait until the ADDR flag set and clear the ADDR flag by
     // reading SR1 and SR2.
@@ -88,6 +93,28 @@ void i2c_send_byte(uint8_t byte) {
 void i2c_stop() {
     // Generate stop condition
     I2C1->CR1 |= I2C_CR1_STOP;
+}
+
+uint8_t i2c_recv_byte() {
+    while(!(I2C1->SR1 & I2C_SR1_RXNE));
+    return I2C1->DR;
+}
+
+void read_eeprom_data(uint8_t chip, uint8_t addr, uint8_t* data, uint16_t len) {
+    int i = 0;
+    i2c_start();
+    i2c_addr(chip, 0);
+    i2c_send_byte(addr);
+    i2c_start();
+    i2c_addr(chip, 1);
+    while(len--) {
+        if(len == 1) {
+            I2C1->CR1 &= ~I2C_CR1_ACK;
+            I2C1->CR1 |= I2C_CR1_STOP;
+        }
+        data[i++] = i2c_recv_byte();
+    }
+    i2c_stop();
 }
 
 void write_eeprom_data(uint8_t chip, uint8_t addr, uint8_t* data, uint16_t len) {
