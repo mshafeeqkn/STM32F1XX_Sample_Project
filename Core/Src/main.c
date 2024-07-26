@@ -63,7 +63,7 @@ void gpio_init() {
 
 }
 
-void i2c_slave_init() {
+void i2c_slave_init(uint8_t addr) {
     RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
     RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
     RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;
@@ -77,20 +77,36 @@ void i2c_slave_init() {
     I2C1->CR2 |= 0x08;
     I2C1->TRISE = 0x9;
     I2C1->CCR = 0x28;
-    I2C1->OAR1 = 0x4024;
+    I2C1->OAR1 = 0x4000 | (addr << 1);
     I2C1->CR1 |= I2C_CR1_PE;
     I2C1->CR1 |= I2C_CR1_ACK;
+}
+void i2c_slave_listen() {
     while(!(I2C1->SR1 & I2C_SR1_ADDR));
     (void)I2C1->SR1;
     (void)I2C1->SR2;
 }
 
+uint8_t i2c_slave_recv_byte() {
+    while(!(I2C1->SR1 & I2C_SR1_RXNE));
+    return I2C1->DR;
+}
+
 int main(void) {
+    uint8_t data;
+    uint8_t addr = 0x13;
     config_sys_clock();
     gpio_init();
-    TURN_ON_LED();
-    i2c_slave_init();
-    TURN_OFF_LED();
+    i2c_slave_init(addr);
+    i2c_slave_listen();
+    data = i2c_slave_recv_byte();
+    data = i2c_slave_recv_byte();
+    for(uint8_t i = 0; i < data; i++) {
+        TURN_ON_LED();
+        delay(800000);
+        TURN_OFF_LED();
+        delay(800000);
+    }
     while(1) {}
 }
 
