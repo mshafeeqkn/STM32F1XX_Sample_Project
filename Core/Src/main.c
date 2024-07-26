@@ -52,9 +52,7 @@ void config_sys_clock() {
     while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSE);
 }
 
-int main(void) {
-    config_sys_clock();
-
+void gpio_init() {
     // Enable clock for GPIOC peripheral
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
 
@@ -62,7 +60,37 @@ int main(void) {
     GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
     TURN_OFF_LED();
-    while(1) {
-    }
+
+}
+
+void i2c_slave_init() {
+    RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
+    RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
+    RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;
+
+    GPIOB->CRL |= (GPIO_CRL_CNF6 | GPIO_CRL_MODE6_0);
+    GPIOB->CRL |= (GPIO_CRL_CNF7 | GPIO_CRL_MODE7_0);
+
+    I2C1->CR1 &= ~(I2C_CR1_PE);
+    I2C1->CR1 |= I2C_CR1_SWRST;
+    I2C1->CR1 &= ~I2C_CR1_SWRST;
+    I2C1->CR2 |= 0x08;
+    I2C1->TRISE = 0x9;
+    I2C1->CCR = 0x28;
+    I2C1->OAR1 = 0x4024;
+    I2C1->CR1 |= I2C_CR1_PE;
+    I2C1->CR1 |= I2C_CR1_ACK;
+    while(!(I2C1->SR1 & I2C_SR1_ADDR));
+    (void)I2C1->SR1;
+    (void)I2C1->SR2;
+}
+
+int main(void) {
+    config_sys_clock();
+    gpio_init();
+    TURN_ON_LED();
+    i2c_slave_init();
+    TURN_OFF_LED();
+    while(1) {}
 }
 
