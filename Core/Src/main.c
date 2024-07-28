@@ -93,20 +93,23 @@ uint8_t i2c_slave_recv_byte() {
 }
 
 int main(void) {
-    uint8_t data;
-    uint8_t addr = 0x13;
+    uint8_t off_time, on_time, repeat;
+    uint8_t addr = 0x14;
     config_sys_clock();
     gpio_init();
     i2c_slave_init(addr);
-    i2c_slave_listen();
-    data = i2c_slave_recv_byte();
-    data = i2c_slave_recv_byte();
-    for(uint8_t i = 0; i < data; i++) {
-        TURN_ON_LED();
-        delay(800000);
-        TURN_OFF_LED();
-        delay(800000);
+
+    while(1) {
+        i2c_slave_listen();
+        on_time = i2c_slave_recv_byte();
+        off_time = i2c_slave_recv_byte();
+        repeat = i2c_slave_recv_byte();
+        for(uint8_t i = 0; i < repeat; i++) {
+            TURN_ON_LED();
+            delay(40000 * on_time);
+            TURN_OFF_LED();
+            delay(40000 * off_time);
+        }
     }
-    while(1) {}
 }
 
