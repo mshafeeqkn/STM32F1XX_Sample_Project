@@ -14,6 +14,7 @@ typedef enum {
     TURN_TOGGLE
 } LedState_t;
 
+
 void delay(uint32_t tick) {
     for (volatile uint32_t i = 0; i < tick; ++i) {
         __NOP();  // No operation (compiler barrier)
@@ -64,52 +65,84 @@ void gpio_init() {
 }
 
 void i2c_slave_init(uint8_t addr) {
+    // Enable clock for Port B, I2C, Alternate function IO
     RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
     RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
     RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;
 
+    // Configure the I2C pins as open-drain output
     GPIOB->CRL |= (GPIO_CRL_CNF6 | GPIO_CRL_MODE6_0);
     GPIOB->CRL |= (GPIO_CRL_CNF7 | GPIO_CRL_MODE7_0);
 
+    // Disable the peripheral enable bit
     I2C1->CR1 &= ~(I2C_CR1_PE);
+
+    // Reset I2C
     I2C1->CR1 |= I2C_CR1_SWRST;
     I2C1->CR1 &= ~I2C_CR1_SWRST;
+
+    // Configure internal clock, raise time
     I2C1->CR2 |= 0x08;
     I2C1->TRISE = 0x9;
+
+    // Clock control register for 100KHz I2C frequency
+    // at system clock frequency of 8MHz
     I2C1->CCR = 0x28;
+
+    // Configure the slave address; as per the datasheet
+    // bit 14 should be set.
     I2C1->OAR1 = 0x4000 | (addr << 1);
+
+    // Enable the peripheral enable bit and ACK
     I2C1->CR1 |= I2C_CR1_PE;
     I2C1->CR1 |= I2C_CR1_ACK;
+    I2C1->CR2 |= I2C_CR2_ITEVTEN;
 }
 void i2c_slave_listen() {
+    // Wait until any master sent our address
+    // through the I2C interface. Clear the flag
+    // if the address matched.
     while(!(I2C1->SR1 & I2C_SR1_ADDR));
     (void)I2C1->SR1;
     (void)I2C1->SR2;
 }
 
 uint8_t i2c_slave_recv_byte() {
+    // Receive 1 byte from the master.
     while(!(I2C1->SR1 & I2C_SR1_RXNE));
     return I2C1->DR;
 }
 
+static volatile uint8_t off_time, on_time;
+void I2C1_EV_IRQHandler() {
+    if((I2C1->SR1 & I2C_SR1_ADDR) != 0) {
+        (void)I2C1->SR1;
+        (void)I2C1->SR2;
+        on_time = i2c_slave_recv_byte();
+        off_time = i2c_slave_recv_byte();
+    }
+
+    if (I2C1->SR1 & I2C_SR1_STOPF) {
+        (void)I2C1->SR1;
+        I2C1->CR1 |= I2C_CR1_PE;
+    }
+}
+
 int main(void) {
-    uint8_t off_time, on_time, repeat;
     uint8_t addr = 0x14;
     config_sys_clock();
     gpio_init();
     i2c_slave_init(addr);
 
+    uint32_t prioritygroup = NVIC_GetPriorityGrouping();
+    NVIC_SetPriority(I2C1_EV_IRQn, NVIC_EncodePriority(prioritygroup, 10, 0));
+    NVIC_EnableIRQ(I2C1_EV_IRQn);
+
     while(1) {
-        i2c_slave_listen();
-        on_time = i2c_slave_recv_byte();
-        off_time = i2c_slave_recv_byte();
-        repeat = i2c_slave_recv_byte();
-        for(uint8_t i = 0; i < repeat; i++) {
-            TURN_ON_LED();
-            delay(40000 * on_time);
-            TURN_OFF_LED();
-            delay(40000 * off_time);
-        }
+        TURN_ON_LED();
+        delay(40000 * on_time);
+        TURN_OFF_LED();
+        delay(40000 * off_time);
     }
 }
 
