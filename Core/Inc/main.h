@@ -36,6 +36,26 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+typedef enum {
+    TURN_OFF,
+    TURN_ON,
+    TURN_TOGGLE
+} LedState_t;
+
+
+typedef struct {
+    uint16_t ts;
+    union {
+        uint16_t stdId;
+        uint32_t extId;
+    } id;
+    uint8_t data[8];
+    uint8_t fmi;
+    uint8_t dlc:4;
+    uint8_t ide:1;
+    uint8_t rtr:1;
+} CAN_Message;
+
 
 /* USER CODE END ET */
 
@@ -59,7 +79,11 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 
 /* USER CODE BEGIN Private defines */
+#define TURN_ON_LED()            turn_led_on(TURN_ON)
+#define TURN_OFF_LED()           turn_led_on(TURN_OFF)
+#define TOGGLE_LED()             turn_led_on(TURN_TOGGLE)
 
+#define CAN_ID_STD               0
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
