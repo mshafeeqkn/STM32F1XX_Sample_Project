@@ -18,21 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
-/**
- * @brief Trun the built in LED on/off/toggle
- *
- * @param state - TURN_ON / TURN_OFF / TURN_TOGGLE
- */
-void turn_led_on(LedState_t state) {
-    if(state == TURN_TOGGLE){
-        GPIOC->ODR ^= GPIO_ODR_ODR13;
-    } else if(state == TURN_ON) {
-        GPIOC->ODR &= ~(GPIO_ODR_ODR13);
-    } else {
-        GPIOC->ODR |= GPIO_ODR_ODR13;
-    }
-}
+#include "led.h"
 
 /**
  * @brief Configure the system clock as 8MHz using
@@ -218,17 +204,7 @@ int main(void) {
     can_enable_interrupt();
     can_start();
 
-    // Enable clock for GPIOC peripheral
-    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
-
-    // Configure GPIO pin as output
-    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
-
     while(1) {
-        // Wait until the overflow flag is set.
-        while( (TIM1->SR & TIM_SR_UIF) == 0) {}
-        TIM1->SR &= ~(TIM_SR_UIF);
         TOGGLE_LED();
     }
 }

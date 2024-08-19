@@ -1,9 +1,9 @@
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
-  * @file           : main.h
-  * @brief          : Header for main.c file.
-  *                   This file contains the common defines of the application.
+  * @file           : led.h
+  * @brief          : Header for led.c file.
+  *                   This file contains the LED related routines.
   ******************************************************************************
   * @attention
   *
@@ -19,8 +19,8 @@
 /* USER CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __MAIN_H
-#define __MAIN_H
+#ifndef __LED_H
+#define __LED_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,19 +36,11 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
-typedef struct {
-    uint16_t ts;
-    union {
-        uint16_t stdId;
-        uint32_t extId;
-    } id;
-    uint8_t data[8];
-    uint8_t fmi;
-    uint8_t dlc:4;
-    uint8_t ide:1;
-    uint8_t rtr:1;
-} CAN_Message;
+typedef enum {
+    TURN_OFF,
+    TURN_ON,
+    TURN_TOGGLE
+} LedState_t;
 
 
 /* USER CODE END ET */
@@ -64,21 +56,22 @@ typedef struct {
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
-void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
+void turn_led_on(LedState_t state);
 
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
 
 /* USER CODE BEGIN Private defines */
-
-#define CAN_ID_STD               0
+#define TURN_ON_LED()            turn_led_on(TURN_ON)
+#define TURN_OFF_LED()           turn_led_on(TURN_OFF)
+#define TOGGLE_LED()             turn_led_on(TURN_TOGGLE)
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __MAIN_H */
+#endif /* __LED_H */
