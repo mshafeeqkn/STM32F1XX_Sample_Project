@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "can.h"
+#include "canMsgQueue.h"
 
 void can_init() {
     // After the reset the CAN will be in the sleep mode
@@ -169,6 +170,8 @@ void USB_LP_CAN1_RX0_IRQHandler(void) {
         msg.data[5] = (CAN1->sFIFOMailBox[0].RDHR & CAN_RDH0R_DATA5) >> CAN_RDH0R_DATA5_Pos;
         msg.data[6] = (CAN1->sFIFOMailBox[0].RDHR & CAN_RDH0R_DATA6) >> CAN_RDH0R_DATA6_Pos;
         msg.data[7] = (CAN1->sFIFOMailBox[0].RDHR & CAN_RDH0R_DATA7) >> CAN_RDH0R_DATA7_Pos;
+
+        CMQ_AddMsg(&msg);
 
         // Release the FIFO
         CAN1->RF0R |= CAN_RF0R_RFOM0;
