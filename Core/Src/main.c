@@ -113,13 +113,29 @@ uint8_t i2c_slave_recv_byte() {
     return I2C1->DR;
 }
 
+void i2c_slave_send_byte(uint8_t byte) {
+    while(!(I2C1->SR1 & I2C_SR1_TXE));
+    I2C1->DR = byte;
+}
+
+void i2c_slave_send_finish() {
+    while(!(I2C1->SR1 & I2C_SR1_AF));
+    I2C1->SR1 &= ~I2C_SR1_AF;
+}
+
 static volatile uint8_t off_time, on_time;
 void I2C1_EV_IRQHandler() {
     if((I2C1->SR1 & I2C_SR1_ADDR) != 0) {
         (void)I2C1->SR1;
         (void)I2C1->SR2;
-        on_time = i2c_slave_recv_byte();
-        off_time = i2c_slave_recv_byte();
+        if(I2C1->SR2 & I2C_SR2_TRA) {
+            i2c_slave_send_byte('A');
+            i2c_slave_send_byte('B');
+            i2c_slave_send_finish();
+        } else {
+            on_time = i2c_slave_recv_byte();
+            off_time = i2c_slave_recv_byte();
+        }
     }
 
     if (I2C1->SR1 & I2C_SR1_STOPF) {
