@@ -65,6 +65,8 @@ void gpio_init() {
 }
 
 void i2c_slave_init(uint8_t addr) {
+    uint32_t prioritygroup;
+
     // Enable clock for Port B, I2C, Alternate function IO
     RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
     RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
@@ -97,6 +99,11 @@ void i2c_slave_init(uint8_t addr) {
     I2C1->CR1 |= I2C_CR1_PE;
     I2C1->CR1 |= I2C_CR1_ACK;
     I2C1->CR2 |= I2C_CR2_ITEVTEN;
+
+    // Configure the NVIC
+    prioritygroup = NVIC_GetPriorityGrouping();
+    NVIC_SetPriority(I2C1_EV_IRQn, NVIC_EncodePriority(prioritygroup, 10, 0));
+    NVIC_EnableIRQ(I2C1_EV_IRQn);
 }
 void i2c_slave_listen() {
     // Wait until any master sent our address
@@ -149,10 +156,6 @@ int main(void) {
     config_sys_clock();
     gpio_init();
     i2c_slave_init(addr);
-
-    uint32_t prioritygroup = NVIC_GetPriorityGrouping();
-    NVIC_SetPriority(I2C1_EV_IRQn, NVIC_EncodePriority(prioritygroup, 10, 0));
-    NVIC_EnableIRQ(I2C1_EV_IRQn);
 
     while(1) {
         TURN_ON_LED();
