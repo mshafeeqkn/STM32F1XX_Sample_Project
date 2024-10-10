@@ -18,6 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb.h"
+#include "uart.h"
 
 // Macro defines
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
@@ -53,6 +55,19 @@ void turn_led_on(LedState_t state) {
  * external crystal oscillator.
  */
 void config_sys_clock() {
+#if 0
+    // Enable HSE (High-Speed External) oscillator
+    RCC->CR |= RCC_CR_HSEON;
+    while ((RCC->CR & RCC_CR_HSERDY) == 0);  // Wait for HSE to be ready
+
+    // Select HSE as the system clock source
+    RCC->CFGR &= ~RCC_CFGR_SW;  // Clear SW bits
+    RCC->CFGR |= RCC_CFGR_SW_HSE;  // Set SW bits to select HSE as system clock
+
+    // Wait until HSE is used as the system clock source
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSE);
+
+#else
     // Enable the HSE
     RCC->CR |= RCC_CR_HSEON;
     while ((RCC->CR & RCC_CR_HSERDY) == 0);
@@ -86,13 +101,15 @@ void config_sys_clock() {
     // Update the global variables with
     // new clock source
     SystemCoreClockUpdate();
+#endif
 }
 
 void config_1sec_timer1() {
     RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
     TIM1->PSC = 7199;
-    TIM1->ARR = 9999;
+    TIM1->ARR = 49999;
     TIM1->CNT = 0;
+    TIM1->SR &= ~(TIM_SR_UIF);
     TIM1->CR1 |= TIM_CR1_CEN;
 }
 
@@ -101,13 +118,15 @@ void config_debug_led() {
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
 
     // Configure GPIO pin as output
-    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);
+    GPIOC->CRH |= (GPIO_CRH_MODE13_0 | GPIO_CRH_MODE13_1);
+
+    turn_led_on(0);
 }
 
-void delay_ms(uint16_t ms) {
-    uint32_t ticks = ms * 18000;
-    for(int i = 0; i < ticks; i++);
+void delay_ms(uint32_t ms) {
+    for (uint32_t i = 0; i < ms * 7200; i++)
+        __asm__("nop");  // No operation, just delay
 }
 
 /**
@@ -116,12 +135,11 @@ void delay_ms(uint16_t ms) {
   */
 int main(void) {
     config_sys_clock();
-    config_1sec_timer1();
     config_debug_led();
+    uart1_setup(UART_TX_ENABLE);
+    delay_ms(1000);
+    init_usb();
+    uart1_send_string("Setup done");
 
-    while(1) {
-        while( (TIM1->SR & TIM_SR_UIF) == 0) {}
-        TIM1->SR &= ~(TIM_SR_UIF);
-        TOGGLE_LED();
-    }
+    while(1);
 }
