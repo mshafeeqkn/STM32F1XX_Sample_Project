@@ -53,16 +53,61 @@ void turn_led_on(LedState_t state) {
  * external crystal oscillator.
  */
 void config_sys_clock() {
-    // Enable HSE (High-Speed External) oscillator
+    // Enable the HSE
     RCC->CR |= RCC_CR_HSEON;
-    while ((RCC->CR & RCC_CR_HSERDY) == 0);  // Wait for HSE to be ready
+    while ((RCC->CR & RCC_CR_HSERDY) == 0);
 
-    // Select HSE as the system clock source
-    RCC->CFGR &= ~RCC_CFGR_SW;  // Clear SW bits
-    RCC->CFGR |= RCC_CFGR_SW_HSE;  // Set SW bits to select HSE as system clock
+    // Set flash latency
+    FLASH->ACR |= FLASH_ACR_LATENCY_2;
 
-    // Wait until HSE is used as the system clock source
-    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSE);
+    // Disable the PLL
+    RCC->CR &= ~RCC_CR_PLLON;
+    while(RCC->CR & RCC_CR_PLLRDY);
+
+    // Configure the PLL
+    RCC->CFGR &= ~RCC_CFGR_PLLMULL;
+    RCC->CFGR |= RCC_CFGR_PLLMULL9;
+    RCC->CFGR |= RCC_CFGR_PLLSRC;
+
+    // Re-enable the PLL
+    RCC->CR |= RCC_CR_PLLON;
+    while(!(RCC->CR & RCC_CR_PLLRDY));
+
+    // Set the PLL as system clock source
+    RCC->CFGR &= ~RCC_CFGR_SW;
+    RCC->CFGR |= RCC_CFGR_SW_PLL;
+    while(0 == (RCC->CFGR & RCC_CFGR_SWS_PLL));
+
+    // Configure AHB and APB prescaler
+    RCC->CFGR |= RCC_CFGR_HPRE_DIV1;            // AHB prescaler
+    RCC->CFGR |= RCC_CFGR_PPRE1_DIV2;           // APB1 prescaler
+    RCC->CFGR |= RCC_CFGR_PPRE2_DIV1;           // APB2 prescaler
+
+    // Update the global variables with
+    // new clock source
+    SystemCoreClockUpdate();
+}
+
+void config_1sec_timer1() {
+    RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+    TIM1->PSC = 7199;
+    TIM1->ARR = 9999;
+    TIM1->CNT = 0;
+    TIM1->CR1 |= TIM_CR1_CEN;
+}
+
+void config_debug_led() {
+    // Enable clock for GPIOC peripheral
+    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
+
+    // Configure GPIO pin as output
+    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
+    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+}
+
+void delay_ms(uint16_t ms) {
+    uint32_t ticks = ms * 18000;
+    for(int i = 0; i < ticks; i++);
 }
 
 /**
@@ -71,16 +116,10 @@ void config_sys_clock() {
   */
 int main(void) {
     config_sys_clock();
-
-    // Enable clock for GPIOC peripheral
-    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
-
-    // Configure GPIO pin as output
-    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+    config_1sec_timer1();
+    config_debug_led();
 
     while(1) {
-        // Wait until the overflow flag is set.
         while( (TIM1->SR & TIM_SR_UIF) == 0) {}
         TIM1->SR &= ~(TIM_SR_UIF);
         TOGGLE_LED();
