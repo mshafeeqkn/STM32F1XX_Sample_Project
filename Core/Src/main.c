@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb.h"
 
 // Macro defines
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
@@ -116,8 +117,9 @@ void delay_ms(uint16_t ms) {
   */
 int main(void) {
     config_sys_clock();
-    config_1sec_timer1();
     config_debug_led();
+
+    init_usb();
 
     while(1) {
         while( (TIM1->SR & TIM_SR_UIF) == 0) {}
