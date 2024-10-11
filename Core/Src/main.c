@@ -92,8 +92,9 @@ void config_sys_clock() {
 void config_1sec_timer1() {
     RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
     TIM1->PSC = 7199;
-    TIM1->ARR = 9999;
+    TIM1->ARR = 49999;
     TIM1->CNT = 0;
+    TIM1->SR &= ~(TIM_SR_UIF);
     TIM1->CR1 |= TIM_CR1_CEN;
 }
 
@@ -102,28 +103,48 @@ void config_debug_led() {
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
 
     // Configure GPIO pin as output
-    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);
+    GPIOC->CRH |= (GPIO_CRH_MODE13_0 | GPIO_CRH_MODE13_1);
+
+    turn_led_on(0);
 }
 
-void delay_ms(uint16_t ms) {
-    uint32_t ticks = ms * 18000;
-    for(int i = 0; i < ticks; i++);
+void delay_ms(uint32_t ms) {
+    for (uint32_t i = 0; i < ms * 7200; i++)
+        __asm__("nop");  // No operation, just delay
 }
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
+extern volatile uint8_t reset_count;
+
 int main(void) {
+    uint8_t clear = 1;
     config_sys_clock();
     config_debug_led();
+    config_1sec_timer1();
 
-    init_usb();
-
+#if 1
     while(1) {
         while( (TIM1->SR & TIM_SR_UIF) == 0) {}
         TIM1->SR &= ~(TIM_SR_UIF);
         TOGGLE_LED();
+        if(!clear--) {
+            TIM1->CR1 &= ~TIM_CR1_CEN;
+            while(reset_count--) {
+                TOGGLE_LED();
+                delay_ms(50);
+                TOGGLE_LED();
+                delay_ms(1000);
+            }
+        }
     }
+#else
+    while (1) {
+        TOGGLE_LED();
+        delay_ms(1000);  // 1 second delay
+    }
+#endif
 }
