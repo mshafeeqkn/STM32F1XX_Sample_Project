@@ -37,12 +37,17 @@
 //      table start byte address should be 8-byte aligned.
 //      (means multiple of 8). Since each member in this array have
 //      size of 8 byte, all members becomes 8 byte aligned.
-#define __PMA_SECTION__         ".pma,\"aw\",%nobits//"
-#define __PMA_BDT_ATTR__        __attribute__((section(__PMA_SECTION__), used, aligned(8)))
+#define __PMA_SECTION__             ".pma,\"aw\",%nobits//"
+#define __PMA_BDT_ATTR__            __attribute__((section(__PMA_SECTION__), used, aligned(8)))
 
-#define USB_LOCAL_ADDR(n)       (uint16_t)((uint32_t)(n) - 0x40006000)
+#define USB_LOCAL_ADDR(n)           (uint16_t)((uint32_t)(n) - 0x40006000)
 
-#define CTRL_ENDPOINT_SIZE      64
+#define CTRL_ENDPOINT_SIZE          64
+
+#define USB_COUNT_RX_BLSIZE_Pos     (15U)
+#define USB_COUNT_RX_BLSIZE_Msk     (0x1UL << USB_COUNT_RX_BLSIZE_Pos)     /*!< 0x80000000 */
+#define USB_COUNT_RX_BLSIZE         USB_COUNT_RX_BLSIZE_Msk                /*!< BL_SIZE, bit 15 */
+#define EPR_NON_TOGGLE_BITS         USB_EPREG_MASK
 
 typedef uint16_t PMAWord_t;
 
@@ -103,8 +108,67 @@ static void usb_endpoint_setup(uint8_t endpoint,
     USB->EP0R = USB_EP_CONTROL | (endpoint & 0xF);
 }
 
+static PMAWord_t* get_pma_buffer(uint16_t size) {
+    PMAWord_t *buffer = pma_ptr;
+
+    // The pma_ptr is PMAWord_t array.
+    // Add extra space to avoid collision
+    size = (size + 1)/sizeof(PMAWord_t);
+
+    pma_ptr += size;
+    return buffer;
+}
+
+static void set_usb_endpoint_status(uint8_t endpoint, uint16_t status, uint16_t mask) {
+    // This is a bit tricky. because the bits we are going to set
+    // is toggle. If we write 1, the value will toggle, and writing
+    // 0 don't have any effect. So we need to write the data based
+    // its current value.
+
+    // Take the copy of current endpoint register
+    // TODO: change this based on the endpoint number
+    uint16_t val = USB->EP0R;
+
+    // XOR the new status value with data read from end point register
+    // As the result we will get val so that the corresponding bits that
+    // needs to be toggled in endpoint register as 1 and other bits as 0.
+    // Eg: if the EP0R register has 0x1000 and if we need to set 0x3000
+    // after the following step we will get val = 0x2000. While writing
+    // this data to EP0R, 13th bit will toggle and EP0R becomes 0x3000
+    val ^= (status & mask);
+    // TODO: change this based on the endpoint number
+    USB->EP0R |= val;
+}
+
 static void usb_endpoint_begin_packet_rx(uint8_t endpoint) {
-    // TODO TODO TODO - next implement this
+    uint16_t pkt_size = endpoint_status[endpoint].size;
+
+    // Exit if reception has finished or not started yet
+    if(endpoint_status[endpoint].rx_pos == 0 || pkt_size == 0) {
+        return;
+    }
+
+    // Setup a space to recieve the incoming packets
+    // Check if the PMA address is present; allocate
+    // if it's not present
+    if(bdt[endpoint].rx_addr == 0) {
+        bdt[endpoint].rx_addr = USB_LOCAL_ADDR(get_pma_buffer(pkt_size));
+
+        // Table 77 in RM0008 explains how to define
+        // Rx count in PMA
+        uint16_t num_block;
+        if(pkt_size > 62) {
+            // BL_SIZE = 1 so that the counter value
+            // become number of block * 64
+            bdt[endpoint].rx_count |= USB_COUNT_RX_BLSIZE;
+            num_block = pkt_size / 64;
+        } else {
+            num_block = pkt_size / 2;
+        }
+
+        bdt[endpoint].rx_count |= (num_block << 10);
+    }
+    set_usb_endpoint_status(endpoint, USB_EP_RX_VALID, USB_EPRX_STAT);
 }
 
 static void usb_endpoint_receive(uint8_t endpoint, void *buff, uint16_t len) {
@@ -116,7 +180,7 @@ static void usb_endpoint_receive(uint8_t endpoint, void *buff, uint16_t len) {
         usb_endpoint_begin_packet_rx(endpoint);
     } else {
         endpoint_status[endpoint].rx_pos = 0;
-        // TODO: update status - see led watch
+        set_usb_endpoint_status(endpoint, USB_EP_RX_DIS, USB_EPRX_STAT);
     }
 }
 
@@ -154,6 +218,12 @@ static void usb_reset(void) {
 
     // Setup the endpoint 0
     reset_endpoint_0();
+
+    //enable correct transfer and reset interrupts
+    USB->CNTR = USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SOFM | USB_CNTR_ERRM | USB_CNTR_PMAOVRM;
+
+    //Reset USB address to 0 with the device enabled
+    USB->DADDR = USB_DADDR_EF;
 }
 
 void USB_LP_CAN1_RX0_IRQHandler() {
@@ -161,6 +231,8 @@ void USB_LP_CAN1_RX0_IRQHandler() {
         usb_reset();
         USB->ISTR &= ~USB_ISTR_RESET;
     }
+
+    // TODO: continue here
 }
 
 void init_usb(void) {
