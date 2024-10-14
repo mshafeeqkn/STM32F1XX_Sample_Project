@@ -61,8 +61,9 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 /* Specify the memory areas */
 MEMORY
 {
-RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 10K
-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 32K
+RAM (xrw)  : ORIGIN = 0x20000000, LENGTH = 10K
+FLASH (rx) : ORIGIN = 0x8000000, LENGTH = 32K
+PMA (W)    : ORIGIN = 0x40006000, LENGTH = 512 /* 256 x 16bit */
 }
 
 /* Define output sections */
@@ -173,7 +174,15 @@ SECTIONS
     . = ALIGN(8);
   } >RAM
 
-  
+  /* USB/CAN Packet Memory Area (PMA) */
+  .pma :
+  {
+	_pma_start = .; /* Start of PMA in real memory space */
+	. = ALIGN(2);
+	*(.pma)			/* Any variable defined the section .pma should add*/
+	. = ALIGN(2);
+	_pma_end = .; 	/* End of PMA in PMA space */
+  } > PMA
 
   /* Remove information from the standard libraries */
   /DISCARD/ :

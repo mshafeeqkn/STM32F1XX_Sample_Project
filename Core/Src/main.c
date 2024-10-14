@@ -118,33 +118,14 @@ void delay_ms(uint32_t ms) {
   * @brief  The application entry point.
   * @retval int
   */
-extern volatile uint8_t reset_count;
-
 int main(void) {
-    uint8_t clear = 1;
     config_sys_clock();
     config_debug_led();
-    config_1sec_timer1();
+    init_usb();
 
-#if 1
     while(1) {
         while( (TIM1->SR & TIM_SR_UIF) == 0) {}
         TIM1->SR &= ~(TIM_SR_UIF);
         TOGGLE_LED();
-        if(!clear--) {
-            TIM1->CR1 &= ~TIM_CR1_CEN;
-            while(reset_count--) {
-                TOGGLE_LED();
-                delay_ms(50);
-                TOGGLE_LED();
-                delay_ms(1000);
-            }
-        }
     }
-#else
-    while (1) {
-        TOGGLE_LED();
-        delay_ms(1000);  // 1 second delay
-    }
-#endif
 }
