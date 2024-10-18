@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb.h"
+#include "uart.h"
 
 // Macro defines
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
@@ -54,6 +55,19 @@ void turn_led_on(LedState_t state) {
  * external crystal oscillator.
  */
 void config_sys_clock() {
+#if 0
+    // Enable HSE (High-Speed External) oscillator
+    RCC->CR |= RCC_CR_HSEON;
+    while ((RCC->CR & RCC_CR_HSERDY) == 0);  // Wait for HSE to be ready
+
+    // Select HSE as the system clock source
+    RCC->CFGR &= ~RCC_CFGR_SW;  // Clear SW bits
+    RCC->CFGR |= RCC_CFGR_SW_HSE;  // Set SW bits to select HSE as system clock
+
+    // Wait until HSE is used as the system clock source
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSE);
+
+#else
     // Enable the HSE
     RCC->CR |= RCC_CR_HSEON;
     while ((RCC->CR & RCC_CR_HSERDY) == 0);
@@ -87,6 +101,7 @@ void config_sys_clock() {
     // Update the global variables with
     // new clock source
     SystemCoreClockUpdate();
+#endif
 }
 
 void config_1sec_timer1() {
@@ -121,11 +136,10 @@ void delay_ms(uint32_t ms) {
 int main(void) {
     config_sys_clock();
     config_debug_led();
+    uart1_setup(UART_TX_ENABLE);
+    delay_ms(1000);
     init_usb();
+    uart1_send_string("Setup done\r\n");
 
-    while(1) {
-        while( (TIM1->SR & TIM_SR_UIF) == 0) {}
-        TIM1->SR &= ~(TIM_SR_UIF);
-        TOGGLE_LED();
-    }
+    while(1);
 }
