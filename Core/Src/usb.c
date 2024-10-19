@@ -320,6 +320,7 @@ static void on_endpoint_0_out_complete() {
 
 void USB_LP_CAN1_RX0_IRQHandler() {
     volatile uint16_t usb_status = USB->ISTR;
+    uart1_send_string(">>  %x\r\n", USB->ISTR);
 
     if(usb_status & USB_ISTR_RESET) {
         usb_reset();
@@ -334,10 +335,26 @@ void USB_LP_CAN1_RX0_IRQHandler() {
         USB->ISTR &= ~USB_ISTR_ESOF;
     }
 
+    if (usb_status & USB_ISTR_SUSP) {
+        USB->ISTR &= ~USB_ISTR_SUSP;
+    }
+    
+    if (usb_status & USB_ISTR_WKUP) {
+        USB->ISTR &= ~USB_ISTR_WKUP;
+    }
+
+    if (usb_status & USB_ISTR_ERR) {
+        USB->ISTR &= ~USB_ISTR_ERR;
+    }
+
+    if (usb_status & USB_ISTR_PMAOVR) {
+        USB->ISTR &= ~USB_ISTR_PMAOVR;
+    }
+
     // uart1_send_string(">>> %x\r\n", USB->ISTR);
-    turn_led_on(2);
     uart1_send_string(">>  %x\r\n", USB->ISTR);
     while((usb_status = USB->ISTR) & USB_ISTR_CTR) {
+        turn_led_on(1);
 #if 0
         // An endpoint completed a valid transaction.
 
