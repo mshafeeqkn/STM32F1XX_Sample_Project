@@ -352,10 +352,7 @@ void USB_LP_CAN1_RX0_IRQHandler() {
     }
 
     // uart1_send_string(">>> %x\r\n", USB->ISTR);
-    uart1_send_string(">>  %x\r\n", USB->ISTR);
     while((usb_status = USB->ISTR) & USB_ISTR_CTR) {
-        turn_led_on(1);
-#if 0
         // An endpoint completed a valid transaction.
 
         // Find the endpoint ID and endpoint register value
@@ -375,7 +372,6 @@ void USB_LP_CAN1_RX0_IRQHandler() {
                 on_endpoint_0_out_complete();
             }
         }
-#endif
     }
 }
 
@@ -384,15 +380,8 @@ void init_usb(void) {
     // Enable clock for the USB
     RCC->APB1ENR |= RCC_APB1ENR_USBEN;
 
-    // Clear power down bit
-    USB->CNTR &= ~USB_CNTR_PDWN;
-
-    // Give a delay of tSTARTUP require 1uS, but
-    // I am giving 1ms delay
-    // 18000 loop * 4 clock per loop ~ 72000 clocks;
-    for(uint16_t i = 0; i < 18000; i++);
-
     // Clear the reset and power down bits
+    USB->CNTR |= USB_CNTR_FRES;
     USB->CNTR &= ~USB_CNTR_FRES;
 
     // Clear interrupt flags if any
