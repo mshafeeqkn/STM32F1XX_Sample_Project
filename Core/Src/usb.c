@@ -21,6 +21,7 @@
 #include "uart.h"
 
 #include <string.h>
+#include <stdbool.h>
 
 // Section name, flags and sub-properties of the memory that is
 // going to use by linkers
@@ -114,6 +115,38 @@ typedef enum {
     USB_CTRL_OK,
     USB_CTRL_STALL
 } USBControlResult_t;
+
+typedef struct {
+    uint16_t value;
+    uint16_t index;
+    size_t length;
+    const void *addr;
+} USBDescriptorEntry_t;
+
+#define USB_DATA_ALIGN __attribute__  ((aligned(2)))
+#define USB_CONTROL_ENDPOINT_SIZE     (64)
+
+static const USB_DATA_ALIGN uint8_t dev_desc[] = {
+    18,                         //bLength
+    1,                          //bDescriptorType
+    0x00, 0x02,                 //bcdUSB
+    0x00,                       //bDeviceClass (defined by interfaces)
+    0x00,                       //bDeviceSubClass
+    0x00,                       //bDeviceProtocl
+    USB_CONTROL_ENDPOINT_SIZE,  //bMaxPacketSize0
+    0xc0, 0x16,                 //idVendor
+    0xdc, 0x05,                 //idProduct
+    0x11, 0x00,                 //bcdDevice
+    1,                          //iManufacturer
+    2,                          //iProduct
+    0,                          //iSerialNumber,
+    1,                          //bNumConfigurations
+};
+
+const USBDescriptorEntry_t usb_descriptors[] = {
+    {0x0100, 0x0000, sizeof(dev_desc), dev_desc},
+    {0x0000, 0x0000, 0x00, NULL}
+};
 
 extern PMAWord_t _pma_end;
 
@@ -274,7 +307,7 @@ static void copy_pma_to_sram(uint16_t *src, void *dst, uint16_t len) {
     for(uint16_t i = 0; i < len; i += sizeof(PMAWord_t)) {
         *dst_addr = *src_addr;
         dst_addr++;
-        src_addr++;
+        src_addr += 2;  // the PMA is 2 byte aligned; so skip the padding
     }
 }
 
@@ -283,7 +316,8 @@ static USBRxStatus_t end_packet_rx(uint8_t endpoint) {
 
     uint16_t rx_count = *APP_ADDR(&bdt[endpoint].rx_count) & 0x1FF;
     uint16_t rx_buff_addr = *APP_ADDR(&bdt[endpoint].rx_addr);
-    uint16_t completed_len = endpoint_status[endpoint].rx_pos - endpoint_status[endpoint].rx_buf;
+    uint16_t completed_len = endpoint_status[endpoint].rx_pos -
+                             endpoint_status[endpoint].rx_buf;
 
     if(USB->EP0R & USB_EP_SETUP) {
         // If the received packet is setup
@@ -295,7 +329,6 @@ static USBRxStatus_t end_packet_rx(uint8_t endpoint) {
         // ie. reception is completed, we got what
         // we require.
 
-        // turn_led_on(1);
         endpoint_status[endpoint].rx_len = completed_len;
         endpoint_status[endpoint].rx_pos = 0;
 
@@ -305,14 +338,54 @@ static USBRxStatus_t end_packet_rx(uint8_t endpoint) {
     return 0;
 }
 
-#if 0
+static bool usb_find_descriptor(uint16_t value, uint16_t index, USBTransferData_t *data) {
+    for(const USBDescriptorEntry_t *current = usb_descriptors;;current++) {
+        if(!current->addr) {
+            break;
+        }
+
+        if(current->value == value && current->index == index) {
+            data->addr = (void*)current->addr;
+            data->len = current->length;
+            return true;
+        }
+    }
+    return false;
+}
+
 static USBControlResult_t endpoint_0_handle_setup_req(USBTransferData_t *nextData) {
+    USBSetupPacket_t *last_setup = &endpoint_status[0].last_setup_pkt;
+    if(last_setup->requestAndType == 0x680 || last_setup->requestAndType == 0x681) {
+        // Second case in led-watch project
+        turn_led_on(1);
+        if(0 != usb_find_descriptor(last_setup->value,
+                                    last_setup->index,
+                                    nextData)) {
+            return USB_CTRL_OK;
+        }
+    }
     return USB_CTRL_STALL;
+}
+
+static void send_ep0_next_packet() {
+}
+
+static void usb_endpoint_0_send(void *buf, uint16_t len) {
+    if(NULL != buf) {
+        endpoint_status[0].tx_buf = buf;
+        endpoint_status[0].tx_len = len;
+        endpoint_status[0].tx_pos = buf;
+
+        send_ep0_next_packet();
+    } else {
+        endpoint_status[0].tx_pos = 0;
+        set_usb_endpoint_status(0, USB_EP_TX_DIS, USB_EPTX_STAT);
+    }
 }
 
 static void on_endpoint_0_setup_complete() {
     USBTransferData_t data = {0, 0};
-    USBSetupPacket_t *setup_pkt __attribute__((unused)) = &endpoint_status[0].last_setup_pkt;
+    USBSetupPacket_t *setup_pkt = &endpoint_status[0].last_setup_pkt;
 
     if(USB_CTRL_STALL == endpoint_0_handle_setup_req(&data)) {
         goto usb_stall;
@@ -323,10 +396,23 @@ static void on_endpoint_0_setup_complete() {
         data.len = setup_pkt->length;
     }
 
+    if(setup_pkt->requestType & 0x80) {
+        // IN transaction (device to host)
+        if(setup_pkt->length) {
+            if(NULL == data.addr) {
+                goto usb_stall;
+            }
+            usb_endpoint_0_send(data.addr, data.len);
+        }
+    } else {
+        // OUT transaction (host to device)
+    }
+
 usb_stall:
     // Stall USB here
 }
 
+#if 0
 static void on_endpoint_0_out_complete() {
 }
 #endif
@@ -363,29 +449,28 @@ void USB_LP_CAN1_RX0_IRQHandler() {
         USB->ISTR &= ~USB_ISTR_PMAOVR;
     }
 
+
     while((usb_status = USB->ISTR) & USB_ISTR_CTR) {
         // An endpoint completed a valid transaction.
 
         // Find the endpoint ID and endpoint register value
         uint8_t endpoint = usb_status & USB_ISTR_EP_ID;
         uint16_t reg_val = USB->EP0R;
+        uint8_t *tmp = endpoint_status[endpoint].rx_pos;
+        tmp = endpoint_status[endpoint].rx_buf;
+        (void)tmp;
 
-#if 1
-        // uint8_t endpoint = 0;
-        uart1_send_string("rx_pos = %x - rx_buf = %x\r\n",
-                    endpoint_status[endpoint].rx_pos,
-                    endpoint_status[endpoint].rx_buf);
-#endif
         if(reg_val & USB_EP_CTR_RX) {
             // This is a receive transaction
             USBRxStatus_t ret = end_packet_rx(endpoint);
-#if 0
+
+            // Clear the CTR flag
             USB->EP0R = reg_val & EPR_NON_TOGGLE_BITS & ~USB_EP_CTR_RX;
 
             if(ret & USB_RX_SETUP) {
                 on_endpoint_0_setup_complete();
             }
-
+#if 0
             if(ret & USB_RX_DONE) {
                 on_endpoint_0_out_complete();
             }
