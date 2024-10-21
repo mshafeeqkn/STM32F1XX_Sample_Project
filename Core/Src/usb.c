@@ -41,9 +41,10 @@
 #define __PMA_SECTION__             ".pma,\"aw\",%nobits//"
 #define __PMA_BDT_ATTR__            __attribute__((section(__PMA_SECTION__), used, aligned(8)))
 
-#define USB_LOCAL_ADDR(n)           (uint16_t)((uint32_t)(n) - 0x40006000)
-#define PMA_ADDR_FROM_LOCAL(n)      (PMAWord_t*)((n) + 0x40006000)
-
+#define PMA_BASE_ADDR               0x40006000
+#define USB_LOCAL_ADDR(n)           (uint16_t)((uint32_t)(n) - PMA_BASE_ADDR)
+#define PMA_ADDR_FROM_LOCAL(n)      (PMAWord_t*)((n) + PMA_BASE_ADDR)
+#define APP_ADDR(n)                 (uint32_t*)((USB_LOCAL_ADDR(n) * 2) + PMA_BASE_ADDR)
 
 #define CTRL_ENDPOINT_SIZE          64
 
@@ -80,7 +81,13 @@ typedef struct __attribute__((packed)) {
 } USBBufferDescriptor_t;
 
 typedef struct {
-    uint16_t requestAndType;
+    union {
+        uint16_t requestAndType;
+        struct {
+            uint8_t requestType;
+            uint8_t request;
+        };
+    };
     uint16_t value;
     uint16_t index;
     uint16_t length;
@@ -182,7 +189,7 @@ static void usb_endpoint_begin_packet_rx(uint8_t endpoint) {
     // Check if the PMA address is present; allocate
     // if it's not present
     if(bdt[endpoint].rx_addr == 0) {
-        bdt[endpoint].rx_addr = USB_LOCAL_ADDR(get_pma_buffer(pkt_size));
+        *APP_ADDR(&bdt[endpoint].rx_addr) = USB_LOCAL_ADDR(get_pma_buffer(pkt_size));
 
         // Table 77 in RM0008 explains how to define
         // Rx count in PMA
@@ -190,12 +197,13 @@ static void usb_endpoint_begin_packet_rx(uint8_t endpoint) {
         if(pkt_size > 62) {
             // BL_SIZE = 1 so that the counter value
             // become number of block * 64
-            bdt[endpoint].rx_count |= USB_COUNT_RX_BLSIZE;
             num_block = pkt_size / 64;
-            bdt[endpoint].rx_count |= ((num_block << 10) | USB_COUNT_RX_BLSIZE);
+            *APP_ADDR(&bdt[endpoint].rx_count) = ((num_block << 10) | USB_COUNT_RX_BLSIZE);
+            // bdt[endpoint].rx_count = ((num_block << 10) | USB_COUNT_RX_BLSIZE);
         } else {
             num_block = pkt_size / 2;
-            bdt[endpoint].rx_count |= (num_block << 10);
+            *APP_ADDR(&bdt[endpoint].rx_count) = (num_block << 10);
+            // bdt[endpoint].rx_count |= (num_block << 10);
         }
     }
 
@@ -235,6 +243,8 @@ static void usb_reset(void) {
     // the buffer locations used for the 8 end points
     // in the PMA.
 
+    USB->ISTR = 0;
+
     // The EBTABLE contain the address of buffer descriptor
     // table inside the PMA.
     USB->BTABLE = USB_LOCAL_ADDR(bdt);
@@ -257,33 +267,35 @@ static void usb_reset(void) {
     //Reset USB address to 0 with the device enabled
     USB->DADDR = USB_DADDR_EF;
 }
-
-#if 0
-static void copy_pma_to_normal_mem(PMAWord_t *src, void *dst, uint16_t len) {
-    uint16_t  *src_addr = (uint16_t*)src;
+static void copy_pma_to_sram(uint16_t *src, void *dst, uint16_t len) {
     PMAWord_t *dst_addr = (PMAWord_t*)dst;
+    uint16_t *src_addr = (uint16_t*)APP_ADDR(src);
 
-    while(len--) {
+    for(uint16_t i = 0; i < len; i += sizeof(PMAWord_t)) {
         *dst_addr = *src_addr;
-        dst_addr++; src_addr++;
+        dst_addr++;
+        src_addr++;
     }
 }
 
 static USBRxStatus_t end_packet_rx(uint8_t endpoint) {
-    uint16_t pkt_size __attribute__((unused))      = endpoint_status[endpoint].size;
+    uint16_t pkt_size = endpoint_status[endpoint].size;
 
-    uint16_t rx_count __attribute__((unused))     = bdt[endpoint].rx_count;
-    uint16_t rx_buff_addr __attribute__((unused)) = bdt[endpoint].rx_addr;
+    uint16_t rx_count = *APP_ADDR(&bdt[endpoint].rx_count) & 0x1FF;
+    uint16_t rx_buff_addr = *APP_ADDR(&bdt[endpoint].rx_addr);
     uint16_t completed_len = endpoint_status[endpoint].rx_pos - endpoint_status[endpoint].rx_buf;
 
     if(USB->EP0R & USB_EP_SETUP) {
         // If the received packet is setup
-        copy_pma_to_normal_mem(PMA_ADDR_FROM_LOCAL(rx_buff_addr),
-                               &endpoint_status[endpoint].last_setup_pkt, 8);
+
+        copy_pma_to_sram(PMA_ADDR_FROM_LOCAL(rx_buff_addr),
+                         &endpoint_status[endpoint].last_setup_pkt, 8);
 
         // This is the only packet for the setup.
         // ie. reception is completed, we got what
         // we require.
+
+        // turn_led_on(1);
         endpoint_status[endpoint].rx_len = completed_len;
         endpoint_status[endpoint].rx_pos = 0;
 
@@ -293,6 +305,7 @@ static USBRxStatus_t end_packet_rx(uint8_t endpoint) {
     return 0;
 }
 
+#if 0
 static USBControlResult_t endpoint_0_handle_setup_req(USBTransferData_t *nextData) {
     return USB_CTRL_STALL;
 }
@@ -320,7 +333,6 @@ static void on_endpoint_0_out_complete() {
 
 void USB_LP_CAN1_RX0_IRQHandler() {
     volatile uint16_t usb_status = USB->ISTR;
-    uart1_send_string(">>  %x\r\n", USB->ISTR);
 
     if(usb_status & USB_ISTR_RESET) {
         usb_reset();
@@ -351,7 +363,6 @@ void USB_LP_CAN1_RX0_IRQHandler() {
         USB->ISTR &= ~USB_ISTR_PMAOVR;
     }
 
-    // uart1_send_string(">>> %x\r\n", USB->ISTR);
     while((usb_status = USB->ISTR) & USB_ISTR_CTR) {
         // An endpoint completed a valid transaction.
 
@@ -359,9 +370,16 @@ void USB_LP_CAN1_RX0_IRQHandler() {
         uint8_t endpoint = usb_status & USB_ISTR_EP_ID;
         uint16_t reg_val = USB->EP0R;
 
+#if 1
+        // uint8_t endpoint = 0;
+        uart1_send_string("rx_pos = %x - rx_buf = %x\r\n",
+                    endpoint_status[endpoint].rx_pos,
+                    endpoint_status[endpoint].rx_buf);
+#endif
         if(reg_val & USB_EP_CTR_RX) {
             // This is a receive transaction
             USBRxStatus_t ret = end_packet_rx(endpoint);
+#if 0
             USB->EP0R = reg_val & EPR_NON_TOGGLE_BITS & ~USB_EP_CTR_RX;
 
             if(ret & USB_RX_SETUP) {
@@ -371,6 +389,7 @@ void USB_LP_CAN1_RX0_IRQHandler() {
             if(ret & USB_RX_DONE) {
                 on_endpoint_0_out_complete();
             }
+#endif
         }
     }
 }
@@ -382,7 +401,8 @@ void init_usb(void) {
 
     // Clear the reset and power down bits
     USB->CNTR |= USB_CNTR_FRES;
-    USB->CNTR &= ~USB_CNTR_FRES;
+    USB->CNTR = 0;
+    // USB->CNTR &= ~USB_CNTR_FRES;
 
     // Clear interrupt flags if any
     USB->ISTR = 0;
