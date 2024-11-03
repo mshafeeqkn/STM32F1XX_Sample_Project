@@ -28,7 +28,7 @@
  *
  * @param byte to be sent
  */
-static void uart1_send_byte(uint8_t ch) {
+void uart1_send_byte(uint8_t ch) {
     while((USART1->SR & USART_SR_TXE) == 0) {}
     USART1->DR = ch;
 }

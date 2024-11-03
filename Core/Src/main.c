@@ -106,8 +106,8 @@ void config_sys_clock() {
 
 void config_1sec_timer1() {
     RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
-    TIM1->PSC = 7199;
-    TIM1->ARR = 49999;
+    TIM1->PSC = 1199;
+    TIM1->ARR = 59999;
     TIM1->CNT = 0;
     TIM1->SR &= ~(TIM_SR_UIF);
     TIM1->CR1 |= TIM_CR1_CEN;
@@ -137,9 +137,8 @@ int main(void) {
     config_sys_clock();
     config_debug_led();
     uart1_setup(UART_TX_ENABLE);
-    delay_ms(1000);
     init_usb();
-    uart1_send_string("Setup done");
+    uart1_send_string("Setup done\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n");
 
     while(1);
 }
