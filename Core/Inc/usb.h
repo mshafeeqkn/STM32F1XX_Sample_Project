@@ -53,6 +53,7 @@ extern "C" {
 /* Exported functions prototypes ---------------------------------------------*/
 /* USER CODE BEGIN EFP */
 void init_usb(void);
+void usb_send_data(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

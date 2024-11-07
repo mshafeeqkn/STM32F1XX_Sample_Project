@@ -124,11 +124,6 @@ void config_debug_led() {
     turn_led_on(0);
 }
 
-void delay_ms(uint32_t ms) {
-    for (uint32_t i = 0; i < ms * 7200; i++)
-        __asm__("nop");  // No operation, just delay
-}
-
 /**
   * @brief  The application entry point.
   * @retval int
@@ -140,5 +135,7 @@ int main(void) {
     init_usb();
     uart1_send_string("Setup done\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n");
 
-    while(1);
+    while(1) {
+        usb_send_data();
+    }
 }

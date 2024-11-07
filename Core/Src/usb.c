@@ -30,10 +30,10 @@
 
 #define USB_EP_REG(n)               (*(__IO uint16_t *)(&(USB)->EP0R + ((n) * 2U)))
 
-#define EP_TX_ADDRS(n)              (*((__IO uint16_t *)(0x40006000) + ((n) * 8)))
-#define EP_TX_COUNT(n)              (*((__IO uint16_t *)(0x40006004) + ((n) * 8)))
-#define EP_RX_ADDRS(n)              (*((__IO uint16_t *)(0x40006008) + ((n) * 8)))
-#define EP_RX_COUNT(n)              (*((__IO uint16_t *)(0x4000600C) + ((n) * 8)))
+#define EP_TX_ADDRS(n)              (*((__IO uint16_t *)(0x40006000) + ((n) * 0x8)))
+#define EP_TX_COUNT(n)              (*((__IO uint16_t *)(0x40006004) + ((n) * 0x8)))
+#define EP_RX_ADDRS(n)              (*((__IO uint16_t *)(0x40006008) + ((n) * 0x8)))
+#define EP_RX_COUNT(n)              (*((__IO uint16_t *)(0x4000600C) + ((n) * 0x8)))
 
 #define EP0_TX_BUFF                 0x18        // Location after BDT 3 entries
 #define EP0_RX_BUFF                 0x58        // Address after 64 bytes from EP0_TX_BUFF
@@ -212,7 +212,7 @@ static void read_data_from_pma(uint16_t src, uint8_t* dst, uint16_t len) {
     uint16_t count = len >> 1;
     uint16_t read_val;
 
-    __IO uint16_t *pma_addr = (__IO uint16_t*)(0x400060B0);
+    __IO uint16_t *pma_addr = (__IO uint16_t*)(PMA_BASE_ADDR + 2 * src);
     for(; count != 0; count--) {
         read_val = *pma_addr;
         pma_addr++;
@@ -232,7 +232,7 @@ void dump_pma() {
         start += 2;
     }
 
-    uart1_send_string("\r\n Addr: 0x40006040-(64byte)---");
+    uart1_send_string("\r\n Addr: 0x4000601C-(64byte)---");
     start = (uint16_t*)(PMA_BASE_ADDR + 0x30);
     for(uint8_t i = 0; i < 16; i++) {
         uart1_send_string("0x%X 0x%04X%04X", start, *start, *(start+1));
@@ -402,7 +402,7 @@ static void write_data_to_pma(uint8_t* src, uint16_t dst, uint16_t len) {
     uint16_t count = (len + 1) >> 1;
     uint16_t write_val;
 
-    __IO uint16_t *pma_addr = (__IO uint16_t*)(0x40006030);
+    __IO uint16_t *pma_addr = (__IO uint16_t*)(PMA_BASE_ADDR + 2 * dst);
     for(; count != 0; count--) {
         write_val = src[0];
         write_val |= src[1] << 8;
@@ -610,7 +610,19 @@ void service_correct_transfer_intr() {
                 }
             }
         } else {
-            uart1_send_string("rx from : %d", endpoint);
+            ep_reg_val = USB_EP_REG(endpoint);
+
+            if((ep_reg_val & USB_EP_CTR_RX) != 0) {
+                CLEAR_RX_EP_CTR(endpoint);
+                xfer_count = EP_RX_COUNT(endpoint) & 0x3FF;
+                read_data_from_pma(EP_RX_ADDRS(endpoint), xfer_data, xfer_count);
+                uart1_send_string("rx from : %d - %s", xfer_count, xfer_data);
+                SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
+            } else if((ep_reg_val & USB_EP_CTR_TX) != 0) {
+                CLEAR_TX_EP_CTR(endpoint);
+                // SET_EP_TX_STATUS(endpoint, USB_EP_TX_STALL);
+                // SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
+            }
         }
     }
 }
@@ -679,4 +691,17 @@ void init_usb(void) {
                            USB_CNTR_SUSPM | USB_CNTR_ERRM |
                            USB_CNTR_SOFM | USB_CNTR_ESOFM |
                            USB_CNTR_RESETM);
+}
+
+uint8_t data[2] = {0x7F, 0x7F};
+
+void delay_ms(uint32_t ms) {
+    for (uint32_t i = 0; i < ms * 7200; i++)
+        __asm__("nop");  // No operation, just delay
+}
+
+void usb_send_data(void) {
+    delay_ms(100);
+    data[0]++; data[1]--;
+    usb_ctrl_send_data(1, data, 2);
 }
