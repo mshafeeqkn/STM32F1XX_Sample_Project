@@ -22,95 +22,11 @@
 #include "string.h"
 #include "stdio.h"
 
-#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
 
-#define EPR_NON_TOGGLE_BITS         USB_EPREG_MASK
-#define PMA_BASE_ADDR               0x40006000
-#define BTABLE_ADDRESS              0x00U
-
-#define USB_EP_REG(n)               (*(__IO uint16_t *)(&(USB)->EP0R + ((n) * 2U)))
-
-#define EP_TX_ADDRS(n)              (*((__IO uint16_t *)(0x40006000) + ((n) * 0x8)))
-#define EP_TX_COUNT(n)              (*((__IO uint16_t *)(0x40006004) + ((n) * 0x8)))
-#define EP_RX_ADDRS(n)              (*((__IO uint16_t *)(0x40006008) + ((n) * 0x8)))
-#define EP_RX_COUNT(n)              (*((__IO uint16_t *)(0x4000600C) + ((n) * 0x8)))
-
-#define EP0_TX_BUFF                 0x18        // Location after BDT 3 entries
-#define EP0_RX_BUFF                 0x58        // Address after 64 bytes from EP0_TX_BUFF
-
-#define EP1_TX_BUFF                 0x98        // Address after 64 bytes from EP0_RX_BUFF
-#define EP1_RX_BUFF                 0xD8        // Address after 64 bytes from EP1_TX_BUFF
-
-#define USBD_PRODUCT_STRING_FS     "STM32 Learning Interface"
-#define USBD_MANUFACTURER_STRING   "STMicroelectronics"
-#define USB_SIZ_STRING_SERIAL       0x1A
-#define UID_BASE                    0x1FFFF7E8UL    /*!< Unique device ID register base address */
-#define DEVICE_ID1                  (UID_BASE)
-#define DEVICE_ID2                  (UID_BASE + 0x4)
-#define DEVICE_ID3                  (UID_BASE + 0x8)
-
-#define SET_EP_TX_STATUS(bEpNum, wState) \
-  do { \
-    uint16_t _wRegVal; \
-    \
-    _wRegVal = USB_EP_REG(bEpNum) & USB_EPTX_DTOGMASK; \
-    /* toggle first bit ? */ \
-    if ((USB_EPTX_DTOG1 & (wState))!= 0U) \
-    { \
-      _wRegVal ^= USB_EPTX_DTOG1; \
-    } \
-    /* toggle second bit ?  */ \
-    if ((USB_EPTX_DTOG2 & (wState))!= 0U) \
-    { \
-      _wRegVal ^= USB_EPTX_DTOG2; \
-    } \
-    USB_EP_REG(bEpNum) =  (_wRegVal | USB_EP_CTR_RX | USB_EP_CTR_TX); \
-  } while(0)
-
-#define SET_EP_RX_STATUS(bEpNum,wState) \
-  do { \
-    uint16_t _wRegVal; \
-    \
-    _wRegVal = USB_EP_REG(bEpNum) & USB_EPRX_DTOGMASK; \
-    /* toggle first bit ? */ \
-    if ((USB_EPRX_DTOG1 & (wState))!= 0U) \
-    { \
-      _wRegVal ^= USB_EPRX_DTOG1; \
-    } \
-    /* toggle second bit ? */ \
-    if ((USB_EPRX_DTOG2 & (wState))!= 0U) \
-    { \
-      _wRegVal ^= USB_EPRX_DTOG2; \
-    } \
-    USB_EP_REG(bEpNum) = (_wRegVal | USB_EP_CTR_RX | USB_EP_CTR_TX); \
-  } while(0)
-
-#define CLEAR_RX_EP_CTR(bEpNum) \
-  do { \
-    uint16_t _wRegVal; \
-    \
-    _wRegVal = USB_EP_REG(bEpNum) & (0x7FFFU & USB_EPREG_MASK); \
-    \
-    USB_EP_REG(bEpNum) = (_wRegVal | USB_EP_CTR_TX); \
-  } while(0)
-
-#define CLEAR_TX_EP_CTR(bEpNum) \
-  do { \
-    uint16_t _wRegVal; \
-    \
-    _wRegVal = USB_EP_REG(bEpNum) & (0xFF7FU & USB_EPREG_MASK); \
-    \
-    USB_EP_REG(bEpNum) = (_wRegVal | USB_EP_CTR_RX); \
-  } while(0)
-
-typedef uint16_t                    PMAWord_t;
-
-typedef enum {
-    EP_TYPE_CTRL,
-    EP_TYPE_INTR
-} EPType_t;
 
 extern PMAWord_t _pma_end;
+
+static uint8_t usb_addr = 0;
 
 static void configure_endpoint(uint8_t endpoint, EPType_t type, uint8_t ep_addr, uint8_t is_rx) {
     // Clear the endpoint type field
@@ -251,28 +167,6 @@ void dump_data(char *str, uint8_t *data, uint8_t len) {
     uart1_send_string("%s", buff);
 }
 
-typedef struct {
-    uint8_t  request_type;
-    uint8_t  request;
-    uint16_t value;
-    uint16_t index;
-    uint16_t length;
-} usb_ctrl_req_t;
-
-#define  SWAPBYTE(addr)             (((uint16_t)(*((uint8_t *)(addr)))) + \
-                                    (((uint16_t)(*(((uint8_t *)(addr)) + 1U))) << 8U))
-#define  LOBYTE(x)                  ((uint8_t)((x) & 0x00FFU))
-#define  HIBYTE(x)                  ((uint8_t)(((x) & 0xFF00U) >> 8U))
-
-#define  USB_DESC_TYPE_DEVICE       0x01U
-#define  USB_MAX_EP0_SIZE           64U
-#define  USBD_VID                   1155
-#define  USBD_PID_FS                22362
-#define  USBD_IDX_MFC_STR           0x01U
-#define  USBD_IDX_PRODUCT_STR       0x02U
-#define  USBD_IDX_SERIAL_STR        0x03U
-#define USBD_MAX_NUM_CONFIGURATION  1
-
 uint8_t dev_desc[0x12]  __attribute__ ((aligned (4))) =
 {
   0x12,                       /*bLength */
@@ -295,21 +189,7 @@ uint8_t dev_desc[0x12]  __attribute__ ((aligned (4))) =
   USBD_MAX_NUM_CONFIGURATION  /*bNumConfigurations*/
 };
 
-#define  USB_DESC_TYPE_CONFIGURATION                0x02U
-#define  USB_CUSTOM_HID_CONFIG_DESC_SIZ             41U
-#define  USB_DESC_TYPE_INTERFACE                    0x04U
-#define  CUSTOM_HID_DESCRIPTOR_TYPE                 0x21U
-#define  USBD_CUSTOM_HID_REPORT_DESC_SIZE           0x03U
-#define  USB_DESC_TYPE_ENDPOINT                     0x05U
-#define  CUSTOM_HID_EPIN_ADDR                       0x81U
-#define  CUSTOM_HID_EPIN_SIZE                       0x02U
-#define  CUSTOM_HID_FS_BINTERVAL                    0x05U
-#define  USB_DESC_TYPE_ENDPOINT                     0x05U
-#define  CUSTOM_HID_EPOUT_ADDR                      0x01U
-#define  CUSTOM_HID_EPOUT_SIZE                      0x02U
-#define  CUSTOM_HID_FS_BINTERVAL                    0x05U
-uint8_t fs_config[41] __attribute__ ((aligned (4))) =
-{
+uint8_t fs_config[41] __attribute__ ((aligned (4))) = {
   0x09, /* bLength: Configuration Descriptor size */
   USB_DESC_TYPE_CONFIGURATION, /* bDescriptorType: Configuration */
   USB_CUSTOM_HID_CONFIG_DESC_SIZ,
@@ -366,11 +246,7 @@ uint8_t fs_config[41] __attribute__ ((aligned (4))) =
   /* 41 */
 };
 
-#define  USB_LEN_LANGID_STR_DESC                        0x04U
-#define  USB_DESC_TYPE_STRING                           0x03U
-#define USBD_LANGID_STRING                              1033
-uint8_t lang_desc[USB_LEN_LANGID_STR_DESC]  __attribute__ ((aligned (4))) =
-{
+uint8_t lang_desc[USB_LEN_LANGID_STR_DESC]  __attribute__ ((aligned (4))) = {
      USB_LEN_LANGID_STR_DESC,
      USB_DESC_TYPE_STRING,
      LOBYTE(USBD_LANGID_STRING),
@@ -378,17 +254,16 @@ uint8_t lang_desc[USB_LEN_LANGID_STR_DESC]  __attribute__ ((aligned (4))) =
 };
 
 uint8_t serial_str[USB_SIZ_STRING_SERIAL] __attribute__ ((aligned (4))) = {
-  USB_SIZ_STRING_SERIAL,
-  USB_DESC_TYPE_STRING,
+    USB_SIZ_STRING_SERIAL,
+    USB_DESC_TYPE_STRING,
 };
 
-static uint8_t report_desc[USBD_CUSTOM_HID_REPORT_DESC_SIZE] __attribute__ ((aligned (4))) =
-{
+static uint8_t report_desc[USBD_CUSTOM_HID_REPORT_DESC_SIZE] __attribute__ ((aligned (4))) = {
   0xA1, 0x01,
   0xC0
 };
 
-uint8_t str_desc[0x100]  __attribute__ ((aligned (4)));
+uint8_t str_desc[USBD_STRING_DESC_SIZE]  __attribute__ ((aligned (4)));
 
 void parse_ctrl_msg(uint8_t *data, usb_ctrl_req_t *req) {
     req->request_type = *(uint8_t *)(data);
@@ -420,8 +295,6 @@ void usb_ctrl_send_data(uint8_t endpoint, uint8_t* buff, uint16_t len) {
     EP_TX_COUNT(endpoint) = len;
     SET_EP_TX_STATUS(endpoint, USB_EP_TX_VALID);
 }
-
-#define  USB_DESC_TYPE_STRING                           0x03U
 
 static uint8_t get_len(uint8_t *buf) {
     uint8_t  len = 0U;
@@ -481,12 +354,183 @@ static void get_serial_num() {
   }
 }
 
-uint8_t usb_addr = 0;
 
 void set_usb_config(uint8_t cfg_idx) {
     configure_endpoint(1, EP_TYPE_INTR, 1, 0);
     configure_endpoint(1, EP_TYPE_INTR, 1, 1);
     usb_ctrl_send_data(0, NULL, 0);
+}
+
+static void process_string_request(usb_ctrl_req_t *req) {
+    uint8_t *buff = NULL;
+    uint16_t len;
+
+    switch(req->value & 0xFF) {
+        case USBD_LANGID_STR:
+            // 80 06 00 03 00 00 FF 00
+            buff = lang_desc;
+            len = sizeof(lang_desc);
+            usb_ctrl_send_data(0, buff, len);
+            break;
+
+        case USBD_MFC_STR:
+            // 80 06 01 03 09 04 FF 00
+            convert_str_to_desc((uint8_t*)USBD_MANUFACTURER_STRING, str_desc, &len);
+            buff = str_desc;
+            usb_ctrl_send_data(0, buff, len);
+            break;
+
+        case USBD_PRODUCT_STR:
+            // 80 06 02 03 09 04 FF 00
+            convert_str_to_desc((uint8_t*)USBD_PRODUCT_STRING_FS, str_desc, &len);
+            buff = str_desc;
+            usb_ctrl_send_data(0, buff, len);
+            break;
+
+        case USBD_SERIAL_STR:
+            // 80 06 03 03 09 04 FF 00
+            len = USB_SIZ_STRING_SERIAL;
+            get_serial_num();
+            buff = serial_str;
+            usb_ctrl_send_data(0, buff, len);
+            break;
+    }
+}
+
+void process_descriptor_request(usb_ctrl_req_t *req) {
+    // Get device descriptor request
+    uint8_t *buff = NULL;
+    uint16_t len;
+
+    switch(req->value >> 8) {
+        case USB_DESC_TYPE_DEVICE:
+            // 80 06 00 01 00 00 40 00
+            buff = dev_desc;
+            len = sizeof(dev_desc);
+            usb_ctrl_send_data(0, buff, len);
+            break;
+
+        case USB_DESC_TYPE_CONFIGURATION:
+            // 80 06 00 02 00 00 09 00
+            buff = fs_config;
+            len = MIN(req->length, sizeof(fs_config));
+            usb_ctrl_send_data(0, buff, len);
+            break;
+
+        case USB_DESC_TYPE_STRING:
+            process_string_request(req);
+            break;
+
+        case USB_DESC_TYPE_DEVICE_QUALIFIER:
+            // 80 06 00 06 00 00 0A 00
+            SET_EP_TX_STATUS(0, USB_EP_TX_STALL);
+            SET_EP_RX_STATUS(0, USB_EP_RX_STALL);
+            break;
+    }
+
+}
+
+static void process_std_request(usb_ctrl_req_t *req) {
+    switch(req->request) {
+        case USB_REQ_SET_ADDRESS:
+            // 00 05 02 00 00 00 00 00
+            usb_addr = req->value & 0x7F;
+            usb_ctrl_send_data(0, NULL, 0);
+            break;
+
+        case USB_REQ_GET_DESCRIPTOR:
+            // Get descriptor request
+            process_descriptor_request(req);
+            break;
+
+        case USB_REQ_SET_CONFIGURATION:
+            // 00 09 01 00 00 00 00 00
+            uint8_t cfg_idx = req->value;
+            set_usb_config(cfg_idx);
+            break;
+    }
+}
+
+static void process_setup_messages() {
+    usb_ctrl_req_t request;
+    uint16_t xfer_count;
+    const uint8_t endpoint = 0;
+    uint8_t xfer_data[16] = {0};
+    uint8_t *buff = NULL;
+    uint16_t len;
+
+    // Get a setup packet
+    xfer_count = get_rx_count(endpoint);
+    read_data_from_pma(EP_RX_ADDRS(endpoint), xfer_data, xfer_count);
+    CLEAR_RX_EP_CTR(endpoint);
+    parse_ctrl_msg(xfer_data, &request);
+    switch(request.request_type & 0x1F) {
+        case USB_REQ_RECIPIENT_DEVICE:
+            // Recepient is a device
+            if(USB_REQ_TYPE_STANDARD == (request.request_type & USB_REQ_TYPE_MASK)) {
+                // Request type is standard
+                process_std_request(&request);
+            }
+            break;
+
+        case USB_REQ_RECIPIENT_INTERFACE:
+            switch(request.request_type & USB_REQ_TYPE_MASK) {
+                case USB_REQ_TYPE_STANDARD:
+                    if(USB_REQ_GET_DESCRIPTOR == request.request) {
+                        if(CUSTOM_HID_REPORT_DESC == (request.value >> 8)) {
+                            // 81 06 00 22 00 00 03 00
+                            buff = report_desc;
+                            len = MIN(request.length, 163);
+                            usb_ctrl_send_data(0, buff, len);
+                        }
+                    }
+                    break;
+
+                case USB_REQ_TYPE_CLASS:
+                    // 21 0A 00 00 00 00 00 00
+                    usb_ctrl_send_data(0, NULL, 0);
+                    break;
+            }
+            break;
+    }
+}
+
+static void process_control_messages() {
+    uint16_t istr_val;
+    const uint8_t endpoint = 0;
+    uint16_t ep_reg_val;
+
+    istr_val = USB->ISTR;
+
+    if(0 == (istr_val & USB_ISTR_DIR)) {
+        // DIR = 0 means CTR_TX = 1; IN transaction
+        CLEAR_TX_EP_CTR(endpoint);
+
+        if(usb_addr != 0) {
+            USB->DADDR = (uint16_t)(usb_addr | USB_DADDR_EF);
+            usb_addr = 0;
+            SET_EP_TX_STATUS(0, USB_EP_TX_STALL);
+        } else {
+            SET_EP_TX_STATUS(0, USB_EP_TX_STALL);
+            SET_EP_RX_STATUS(0, USB_EP_RX_VALID);
+        }
+    } else {
+        // If DIR = 1 & CTR_RX which means a SETUP
+        // transaction interrupt or OUT transaction
+        // interrupt is pending
+
+        // If DIR = 1 & (CTR_RX | CTR_TX) means, both
+        // TX and RX transaction interrupts are pending
+        ep_reg_val = USB_EP_REG(endpoint);
+
+        if(ep_reg_val & USB_EP_SETUP) {
+            process_setup_messages();
+        } else if(0 != (ep_reg_val & USB_EP_CTR_RX)) {
+            CLEAR_RX_EP_CTR(endpoint);
+            EP_RX_COUNT(endpoint) = ((1 << 10) | USB_COUNT0_RX_BLSIZE);
+            SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
+        }
+    }
 }
 
 void service_correct_transfer_intr() {
@@ -495,120 +539,12 @@ void service_correct_transfer_intr() {
     uint16_t ep_reg_val;
     uint16_t xfer_count;
     uint8_t xfer_data[16] = {0};
-    uint8_t *buff = NULL;
-    uint16_t len;
-    usb_ctrl_req_t request;
 
     while (USB->ISTR & USB_ISTR_CTR) {
         istr_val = USB->ISTR;
         endpoint = istr_val & USB_ISTR_EP_ID;
         if(endpoint == 0) {
-            if(0 == (istr_val & USB_ISTR_DIR)) {
-                // DIR = 0 means CTR_TX = 1; IN transaction
-                CLEAR_TX_EP_CTR(endpoint);
-
-                if(usb_addr != 0) {
-                    USB->DADDR = (uint16_t)(usb_addr | USB_DADDR_EF);
-                    usb_addr = 0;
-                    SET_EP_TX_STATUS(0, USB_EP_TX_STALL);
-                } else {
-                    SET_EP_TX_STATUS(0, USB_EP_TX_STALL);
-                    SET_EP_RX_STATUS(0, USB_EP_RX_VALID);
-                }
-
-                //uart1_send_string("<0 - %X", USB->EP0R);
-
-            } else {
-                // If DIR = 1 & CTR_RX which means a SETUP
-                // transaction interrupt or OUT transaction
-                // interrupt is pending
-
-                // If DIR = 1 & (CTR_RX | CTR_TX) means, both
-                // TX and RX transaction interrupts are pending
-                ep_reg_val = USB_EP_REG(endpoint);
-
-                if(ep_reg_val & USB_EP_SETUP) {
-                    // Get a setup packet
-                    xfer_count = get_rx_count(endpoint);
-                    read_data_from_pma(EP_RX_ADDRS(endpoint), xfer_data, xfer_count);
-                    CLEAR_RX_EP_CTR(endpoint);
-                    parse_ctrl_msg(xfer_data, &request);
-                    if(0x0 == (request.request_type & 0x1F)) {
-                        // Recepient is a device
-                        if(0x0 == (request.request_type & 0x60)) {
-                            // Request type is standard
-                            if(0x5 == request.request) {
-                                // 00 05 02 00 00 00 00 00
-                                usb_addr = request.value & 0x7F;
-                                usb_ctrl_send_data(0, NULL, 0);
-                            } else if(0x6 == request.request) {
-                                // Get descriptor request
-                                if(0x1 == (request.value >> 8)) {
-                                    // Get device descriptor request
-                                    // 80 06 00 01 00 00 40 00
-                                    buff = dev_desc;
-                                    len = sizeof(dev_desc);
-                                    usb_ctrl_send_data(0, buff, len);
-                                } else if( 0x2 == request.value >> 8) {
-                                    // 80 06 00 02 00 00 09 00
-                                    buff = fs_config;
-                                    len = MIN(request.length, sizeof(fs_config));
-                                    usb_ctrl_send_data(0, buff, len);
-                                } else if( 0x3 == request.value >> 8) {
-                                    if(0x0 == (request.value & 0xFF)) {
-                                        // 80 06 00 03 00 00 FF 00
-                                        buff = lang_desc;
-                                        len = sizeof(lang_desc);
-                                        usb_ctrl_send_data(0, buff, len);
-                                    } else if(0x1 == (request.value & 0xFF)) {
-                                        // 80 06 01 03 09 04 FF 00
-                                        convert_str_to_desc((uint8_t*)USBD_MANUFACTURER_STRING, str_desc, &len);
-                                        buff = str_desc;
-                                        usb_ctrl_send_data(0, buff, len);
-                                    } else if(0x2 == (request.value & 0xFF)) {
-                                        // 80 06 02 03 09 04 FF 00
-                                        convert_str_to_desc((uint8_t*)USBD_PRODUCT_STRING_FS, str_desc, &len);
-                                        buff = str_desc;
-                                        usb_ctrl_send_data(0, buff, len);
-                                    } else if(0x3 == (request.value & 0xFF)) {
-                                        // 80 06 03 03 09 04 FF 00
-                                        len = USB_SIZ_STRING_SERIAL;
-                                        get_serial_num();
-                                        buff = serial_str;
-                                        usb_ctrl_send_data(0, buff, len);
-                                    }
-                                } else if( 0x6 == request.value >> 8) {
-                                    // 80 06 00 06 00 00 0A 00
-                                    SET_EP_TX_STATUS(0, USB_EP_TX_STALL);
-                                    SET_EP_RX_STATUS(0, USB_EP_RX_STALL);
-                                }
-                            } else if(0x9 == request.request) {
-                                // 00 09 01 00 00 00 00 00
-                                uint8_t cfg_idx = request.value;
-                                set_usb_config(cfg_idx);
-                            }
-                        }
-                    } else if(0x1 == (request.request_type & 0x1F)) {
-                        if(0x0 == (request.request_type & 0x60)) {
-                            if(0x6 == request.request) {
-                                if(0x22 == request.value >> 8) {
-                                    // 81 06 00 22 00 00 03 00
-                                    buff = report_desc;
-                                    len = MIN(request.length, 163);
-                                    usb_ctrl_send_data(0, buff, len);
-                                }
-                            }
-                        } else if(0x20 == (request.request_type & 0x60)) {
-                            // 21 0A 00 00 00 00 00 00
-                            usb_ctrl_send_data(0, NULL, 0);
-                        }
-                    }
-                } else if(0 != (ep_reg_val & USB_EP_CTR_RX)) {
-                    CLEAR_RX_EP_CTR(endpoint);
-                    EP_RX_COUNT(endpoint) = ((1 << 10) | USB_COUNT0_RX_BLSIZE);
-                    SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
-                }
-            }
+            process_control_messages();
         } else {
             ep_reg_val = USB_EP_REG(endpoint);
 
@@ -620,8 +556,6 @@ void service_correct_transfer_intr() {
                 SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
             } else if((ep_reg_val & USB_EP_CTR_TX) != 0) {
                 CLEAR_TX_EP_CTR(endpoint);
-                // SET_EP_TX_STATUS(endpoint, USB_EP_TX_STALL);
-                // SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
             }
         }
     }

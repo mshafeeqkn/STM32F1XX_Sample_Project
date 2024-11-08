@@ -37,6 +37,146 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+//Common macros
+#define EP0_TX_BUFF                                     0x18        // Location after BDT 3 entries
+#define EP0_RX_BUFF                                     0x58        // Address after 64 bytes from EP0_TX_BUFF
+
+#define EP1_TX_BUFF                                     0x68        // Address after 64 bytes from EP0_RX_BUFF
+#define EP1_RX_BUFF                                     0x6C        // Address after 64 bytes from EP1_TX_BUFF
+
+#define USBD_PRODUCT_STRING_FS                          "STM32 Learning Interface"
+#define USBD_MANUFACTURER_STRING                        "STMicroelectronics"
+#define USB_SIZ_STRING_SERIAL                           0x1A
+#define UID_BASE                                        0x1FFFF7E8UL    /*!< Unique device ID register base address */
+#define DEVICE_ID1                                      (UID_BASE)
+#define DEVICE_ID2                                      (UID_BASE + 0x4)
+#define DEVICE_ID3                                      (UID_BASE + 0x8)
+
+#define EPR_NON_TOGGLE_BITS                             USB_EPREG_MASK
+#define PMA_BASE_ADDR                                   0x40006000
+#define BTABLE_ADDRESS                                  0x00U
+
+#define  CUSTOM_HID_REPORT_DESC                         0x22U
+
+#define  USB_REQ_RECIPIENT_DEVICE                       0x00U
+#define  USB_REQ_RECIPIENT_INTERFACE                    0x01U
+
+#define  USB_REQ_TYPE_STANDARD                          0x00U
+#define  USB_REQ_TYPE_CLASS                             0x20U
+#define  USB_REQ_TYPE_MASK                              0x60U
+
+#define  USB_REQ_SET_ADDRESS                            0x05U
+#define  USB_REQ_GET_DESCRIPTOR                         0x06U
+#define  USB_REQ_SET_CONFIGURATION                      0x09U
+
+#define  USB_DESC_TYPE_DEVICE                           0x01U
+#define  USB_DESC_TYPE_CONFIGURATION                    0x02U
+#define  USB_DESC_TYPE_STRING                           0x03U
+#define  USB_DESC_TYPE_DEVICE_QUALIFIER                 0x06U
+
+#define  USBD_LANGID_STR                                0x00U
+#define  USBD_MFC_STR                                   0x01U
+#define  USBD_PRODUCT_STR                               0x02U
+#define  USBD_SERIAL_STR                                0x03U
+#define  USBD_STRING_DESC_SIZE                          0x100
+
+// Macros related to language descriptors
+#define  USB_LEN_LANGID_STR_DESC                        0x04U
+#define  USB_DESC_TYPE_STRING                           0x03U
+#define  USBD_LANGID_STRING                             1033
+
+// Macros related to FS descriptors
+#define  USB_DESC_TYPE_CONFIGURATION                    0x02U
+#define  USB_CUSTOM_HID_CONFIG_DESC_SIZ                 0x29U
+#define  USB_DESC_TYPE_INTERFACE                        0x04U
+#define  CUSTOM_HID_DESCRIPTOR_TYPE                     0x21U
+#define  USBD_CUSTOM_HID_REPORT_DESC_SIZE               0x03U
+#define  USB_DESC_TYPE_ENDPOINT                         0x05U
+#define  CUSTOM_HID_EPIN_ADDR                           0x81U
+#define  CUSTOM_HID_EPIN_SIZE                           0x02U
+#define  CUSTOM_HID_FS_BINTERVAL                        0x05U
+#define  USB_DESC_TYPE_ENDPOINT                         0x05U
+#define  CUSTOM_HID_EPOUT_ADDR                          0x01U
+#define  CUSTOM_HID_EPOUT_SIZE                          0x02U
+#define  CUSTOM_HID_FS_BINTERVAL                        0x05U
+
+// Device descriptor related macros
+#define  USB_DESC_TYPE_DEVICE                           0x01U
+#define  USB_MAX_EP0_SIZE                               64U
+#define  USBD_VID                                       1155
+#define  USBD_PID_FS                                    22362
+#define  USBD_IDX_MFC_STR                               0x01U
+#define  USBD_IDX_PRODUCT_STR                           0x02U
+#define  USBD_IDX_SERIAL_STR                            0x03U
+#define  USBD_MAX_NUM_CONFIGURATION                     1
+
+// Utility macros
+#define USB_EP_REG(n)               (*(__IO uint16_t *)(&(USB)->EP0R + ((n) * 2U)))
+
+#define EP_TX_ADDRS(n)              (*((__IO uint16_t *)(0x40006000) + ((n) * 0x8)))
+#define EP_TX_COUNT(n)              (*((__IO uint16_t *)(0x40006004) + ((n) * 0x8)))
+#define EP_RX_ADDRS(n)              (*((__IO uint16_t *)(0x40006008) + ((n) * 0x8)))
+#define EP_RX_COUNT(n)              (*((__IO uint16_t *)(0x4000600C) + ((n) * 0x8)))
+#define MIN(a, b)                   (((a) < (b)) ? (a) : (b))
+
+#define  SWAPBYTE(addr)             (((uint16_t)(*((uint8_t *)(addr)))) + \
+                                    (((uint16_t)(*(((uint8_t *)(addr)) + 1U))) << 8U))
+#define  LOBYTE(x)                  ((uint8_t)((x) & 0x00FFU))
+#define  HIBYTE(x)                  ((uint8_t)(((x) & 0xFF00U) >> 8U))
+
+#define SET_EP_TX_STATUS(bEpNum, wState) \
+  do { \
+    uint16_t _wRegVal; \
+    \
+    _wRegVal = USB_EP_REG(bEpNum) & USB_EPTX_DTOGMASK; \
+    /* toggle first bit ? */ \
+    if ((USB_EPTX_DTOG1 & (wState))!= 0U) \
+    { \
+      _wRegVal ^= USB_EPTX_DTOG1; \
+    } \
+    /* toggle second bit ?  */ \
+    if ((USB_EPTX_DTOG2 & (wState))!= 0U) \
+    { \
+      _wRegVal ^= USB_EPTX_DTOG2; \
+    } \
+    USB_EP_REG(bEpNum) =  (_wRegVal | USB_EP_CTR_RX | USB_EP_CTR_TX); \
+  } while(0)
+
+#define SET_EP_RX_STATUS(bEpNum,wState) \
+  do { \
+    uint16_t _wRegVal; \
+    \
+    _wRegVal = USB_EP_REG(bEpNum) & USB_EPRX_DTOGMASK; \
+    /* toggle first bit ? */ \
+    if ((USB_EPRX_DTOG1 & (wState))!= 0U) \
+    { \
+      _wRegVal ^= USB_EPRX_DTOG1; \
+    } \
+    /* toggle second bit ? */ \
+    if ((USB_EPRX_DTOG2 & (wState))!= 0U) \
+    { \
+      _wRegVal ^= USB_EPRX_DTOG2; \
+    } \
+    USB_EP_REG(bEpNum) = (_wRegVal | USB_EP_CTR_RX | USB_EP_CTR_TX); \
+  } while(0)
+
+#define CLEAR_RX_EP_CTR(bEpNum) \
+  do { \
+    uint16_t _wRegVal; \
+    \
+    _wRegVal = USB_EP_REG(bEpNum) & (0x7FFFU & USB_EPREG_MASK); \
+    \
+    USB_EP_REG(bEpNum) = (_wRegVal | USB_EP_CTR_TX); \
+  } while(0)
+
+#define CLEAR_TX_EP_CTR(bEpNum) \
+  do { \
+    uint16_t _wRegVal; \
+    \
+    _wRegVal = USB_EP_REG(bEpNum) & (0xFF7FU & USB_EPREG_MASK); \
+    \
+    USB_EP_REG(bEpNum) = (_wRegVal | USB_EP_CTR_RX); \
+  } while(0)
 
 /* USER CODE END ET */
 
@@ -49,6 +189,21 @@ extern "C" {
 /* USER CODE BEGIN EM */
 
 /* USER CODE END EM */
+
+typedef enum {
+    EP_TYPE_CTRL,
+    EP_TYPE_INTR
+} EPType_t;
+
+typedef uint16_t                    PMAWord_t;
+
+typedef struct {
+    uint8_t  request_type;
+    uint8_t  request;
+    uint16_t value;
+    uint16_t index;
+    uint16_t length;
+} usb_ctrl_req_t;
 
 /* Exported functions prototypes ---------------------------------------------*/
 /* USER CODE BEGIN EFP */
