@@ -22,13 +22,60 @@
 #include "string.h"
 #include "stdio.h"
 
-
+#define PMA_BDT_ATTR    __attribute__((section(".pma,\"aw\",%nobits//"), used, aligned(8)))
 
 extern PMAWord_t _pma_end;
-
 static uint8_t usb_addr = 0;
+static uint8_t data[2] = {0x7F, 0x7F};
+
+typedef struct {
+    PMAWord_t tx_addrs;
+    PMAWord_t tx_count;
+    PMAWord_t rx_addrs;
+    PMAWord_t rx_count;
+} usb_buff_desc_t;
+
+static usb_buff_desc_t  PMA_BDT_ATTR buff_desc_table[2];
+static PMAWord_t *pma_ptr = NULL;
+
+void dump_pma() {
+    uint16_t *start = (uint16_t*)PMA_BASE_ADDR;
+    uart1_send_string("----------- BDT ------------");
+    for(uint8_t i = 0; i < 8; i++) {
+        uart1_send_string("0x%X 0x%04X%04X", start, *start, *(start+1));
+        start += 2;
+    }
+
+    uart1_send_string("\r\n Addr: 0x4000601C-(64byte)---");
+    start = (uint16_t*)(PMA_BASE_ADDR + 0x30);
+    for(uint8_t i = 0; i < 16; i++) {
+        uart1_send_string("0x%X 0x%04X%04X", start, *start, *(start+1));
+        start += 2;
+    }
+    uart1_send_string("----------------------------\r\n");
+}
+
+void dump_data(char *str, uint8_t *data, uint8_t len) {
+    char buff[len * 3];
+
+    uart1_send_string("%s----------- DATA ------------", str);
+    for(uint8_t i = 0; i < len; i++) {
+        snprintf(buff + i*3, 4, "%02X ", data[i]);
+    }
+    uart1_send_string("%s", buff);
+}
+
+static PMAWord_t *allocate_pma_buffer(uint16_t len) {
+    PMAWord_t *ret = pma_ptr;
+    pma_ptr += (len + 1) >> 1;
+    // uart1_send_string("Allocated: %X (%X), next: %X", ret, PMA_ADDR_FROM_APP(ret), pma_ptr);
+    return ret;
+}
 
 static void configure_endpoint(uint8_t endpoint, EPType_t type, uint8_t ep_addr, uint8_t is_rx) {
+    uint16_t num_block;
+    uint16_t pkt_size = (endpoint == 0) ? EP0_BUFFER_SIZE : EP1_BUFFER_SIZE;
+
     // Clear the endpoint type field
     USB_EP_REG(endpoint) &= (~USB_EP_T_FIELD) & USB_EPREG_MASK ;
 
@@ -46,20 +93,21 @@ static void configure_endpoint(uint8_t endpoint, EPType_t type, uint8_t ep_addr,
     USB_EP_REG(endpoint) |= (uint16_t)(ep_addr | USB_EP_CTR_TX | USB_EP_CTR_RX);
 
     if(0 != is_rx) {
-        uint16_t num_block, pkt_size = (endpoint == 0) ? 64 : 2;
 
         // Set receive buffer address for the endpoint
-        EP_RX_ADDRS(endpoint) = endpoint ? EP1_RX_BUFF : EP0_RX_BUFF;
+        if(buff_desc_table[endpoint].rx_addrs == 0) {
+            buff_desc_table[endpoint].rx_addrs = PMA_ADDR_FROM_APP(allocate_pma_buffer(pkt_size));
+        }
 
         // Set maximum packet size that the endpoint can hold
         if(pkt_size > 62) {
             // BL_SIZE = 1 so that the counter value
             // become number of block * 64
             num_block = pkt_size / 64;
-            EP_RX_COUNT(endpoint) = ((num_block << 10) | USB_COUNT0_RX_BLSIZE);
+            buff_desc_table[endpoint].rx_count = ((num_block << 10) | USB_COUNT0_RX_BLSIZE);
         } else {
             num_block = pkt_size / 2;
-            EP_RX_COUNT(endpoint) = (num_block << 10);
+            buff_desc_table[endpoint].rx_count = (num_block << 10);
         }
 
         // Clear DTOG_RX bit
@@ -70,8 +118,11 @@ static void configure_endpoint(uint8_t endpoint, EPType_t type, uint8_t ep_addr,
         SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
     } else {
         // Set transmit buffer address for the endpoint
-        EP_TX_ADDRS(endpoint) = endpoint ? EP1_TX_BUFF : EP0_TX_BUFF;
-        EP_TX_COUNT(endpoint) = 0;
+        if(buff_desc_table[endpoint].tx_addrs == 0) {
+            buff_desc_table[endpoint].tx_addrs = PMA_ADDR_FROM_APP(allocate_pma_buffer(pkt_size));
+        }
+
+        buff_desc_table[endpoint].tx_count = 0;
 
         // Clear DTOG_TX bit
         if(0 != (USB_EP_REG(endpoint) & USB_EP_DTOG_TX)) {
@@ -105,6 +156,9 @@ static void deconfigure_endpoint(uint8_t endpoint, uint8_t is_rx) {
 }
 
 static void usb_reset(void) {
+    memset(buff_desc_table, 0, sizeof(buff_desc_table));
+    pma_ptr = &_pma_end;
+
     // Open control endpoint
     configure_endpoint(0, EP_TYPE_CTRL, 0, 0);  // For TX endpoint
     configure_endpoint(0, EP_TYPE_CTRL, 0, 1);  // For RX endpoint
@@ -114,11 +168,15 @@ static void usb_reset(void) {
     deconfigure_endpoint(1, 1);                 // For RX endpoint
 
     USB->DADDR = (uint16_t)USB_DADDR_EF;
+
+    USB->CNTR = (uint16_t)(USB_CNTR_CTRM  | USB_CNTR_WKUPM |
+                           USB_CNTR_SUSPM | USB_CNTR_ERRM |
+                           USB_CNTR_SOFM | USB_CNTR_ESOFM);
 }
 
 static inline uint16_t get_rx_count(uint8_t endpoint) {
     if(endpoint == 0) {
-        return (EP_RX_COUNT(endpoint) & 0x3FF);
+        return (buff_desc_table[endpoint].rx_count & 0x3FF);
     } else {
         return 0;
     }
@@ -138,33 +196,6 @@ static void read_data_from_pma(uint16_t src, uint8_t* dst, uint16_t len) {
         *dst = (uint8_t)((read_val >> 8) & 0xFF);
         dst++;
     }
-}
-
-void dump_pma() {
-    uint16_t *start = (uint16_t*)PMA_BASE_ADDR;
-    uart1_send_string("----------- BDT ------------");
-    for(uint8_t i = 0; i < 8; i++) {
-        uart1_send_string("0x%X 0x%04X%04X", start, *start, *(start+1));
-        start += 2;
-    }
-
-    uart1_send_string("\r\n Addr: 0x4000601C-(64byte)---");
-    start = (uint16_t*)(PMA_BASE_ADDR + 0x30);
-    for(uint8_t i = 0; i < 16; i++) {
-        uart1_send_string("0x%X 0x%04X%04X", start, *start, *(start+1));
-        start += 2;
-    }
-    uart1_send_string("----------------------------\r\n");
-}
-
-void dump_data(char *str, uint8_t *data, uint8_t len) {
-    char buff[len * 3];
-
-    uart1_send_string("%s----------- DATA ------------", str);
-    for(uint8_t i = 0; i < len; i++) {
-        snprintf(buff + i*3, 4, "%02X ", data[i]);
-    }
-    uart1_send_string("%s", buff);
 }
 
 uint8_t dev_desc[0x12]  __attribute__ ((aligned (4))) =
@@ -291,8 +322,8 @@ static void write_data_to_pma(uint8_t* src, uint16_t dst, uint16_t len) {
 }
 
 void usb_ctrl_send_data(uint8_t endpoint, uint8_t* buff, uint16_t len) {
-    write_data_to_pma(buff, EP_TX_ADDRS(endpoint), len);
-    EP_TX_COUNT(endpoint) = len;
+    write_data_to_pma(buff, buff_desc_table[endpoint].tx_addrs, len);
+    buff_desc_table[endpoint].tx_count = len;
     SET_EP_TX_STATUS(endpoint, USB_EP_TX_VALID);
 }
 
@@ -461,7 +492,7 @@ static void process_setup_messages() {
 
     // Get a setup packet
     xfer_count = get_rx_count(endpoint);
-    read_data_from_pma(EP_RX_ADDRS(endpoint), xfer_data, xfer_count);
+    read_data_from_pma(buff_desc_table[endpoint].rx_addrs, xfer_data, xfer_count);
     CLEAR_RX_EP_CTR(endpoint);
     parse_ctrl_msg(xfer_data, &request);
     switch(request.request_type & 0x1F) {
@@ -527,7 +558,7 @@ static void process_control_messages() {
             process_setup_messages();
         } else if(0 != (ep_reg_val & USB_EP_CTR_RX)) {
             CLEAR_RX_EP_CTR(endpoint);
-            EP_RX_COUNT(endpoint) = ((1 << 10) | USB_COUNT0_RX_BLSIZE);
+            buff_desc_table[endpoint].rx_count = ((1 << 10) | USB_COUNT0_RX_BLSIZE);
             SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
         }
     }
@@ -550,8 +581,8 @@ void service_correct_transfer_intr() {
 
             if((ep_reg_val & USB_EP_CTR_RX) != 0) {
                 CLEAR_RX_EP_CTR(endpoint);
-                xfer_count = EP_RX_COUNT(endpoint) & 0x3FF;
-                read_data_from_pma(EP_RX_ADDRS(endpoint), xfer_data, xfer_count);
+                xfer_count = buff_desc_table[endpoint].rx_count & 0x3FF;
+                read_data_from_pma(buff_desc_table[endpoint].rx_addrs, xfer_data, xfer_count);
                 uart1_send_string("rx from : %d - %s", xfer_count, xfer_data);
                 SET_EP_RX_STATUS(endpoint, USB_EP_RX_VALID);
             } else if((ep_reg_val & USB_EP_CTR_TX) != 0) {
@@ -560,7 +591,6 @@ void service_correct_transfer_intr() {
         }
     }
 }
-
 void USB_LP_CAN1_RX0_IRQHandler() {
     volatile uint16_t usb_status = USB->ISTR;
 
@@ -569,7 +599,6 @@ void USB_LP_CAN1_RX0_IRQHandler() {
         USB->ISTR &= ~USB_ISTR_RESET;
         return;
     }
-
     if(usb_status & USB_ISTR_SOF) {
         USB->ISTR &= ~USB_ISTR_SOF;
         return;
@@ -621,14 +650,8 @@ void init_usb(void) {
     // Clear all pending interrupts and enable all
     // USB related interrupts
     USB->ISTR = 0U;
-    USB->CNTR = (uint16_t)(USB_CNTR_CTRM  | USB_CNTR_WKUPM |
-                           USB_CNTR_SUSPM | USB_CNTR_ERRM |
-                           USB_CNTR_SOFM | USB_CNTR_ESOFM |
-                           USB_CNTR_RESETM);
+    USB->CNTR = (uint16_t)(USB_CNTR_RESETM);
 }
-
-uint8_t data[2] = {0x7F, 0x7F};
-
 void delay_ms(uint32_t ms) {
     for (uint32_t i = 0; i < ms * 7200; i++)
         __asm__("nop");  // No operation, just delay

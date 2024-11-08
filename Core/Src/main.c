@@ -136,6 +136,7 @@ int main(void) {
     uart1_send_string("Setup done\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n");
 
     while(1) {
+        delay_ms(100);
         usb_send_data();
     }
 }

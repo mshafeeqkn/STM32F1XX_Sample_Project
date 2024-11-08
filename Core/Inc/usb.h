@@ -38,11 +38,8 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
 //Common macros
-#define EP0_TX_BUFF                                     0x18        // Location after BDT 3 entries
-#define EP0_RX_BUFF                                     0x58        // Address after 64 bytes from EP0_TX_BUFF
-
-#define EP1_TX_BUFF                                     0x68        // Address after 64 bytes from EP0_RX_BUFF
-#define EP1_RX_BUFF                                     0x6C        // Address after 64 bytes from EP1_TX_BUFF
+#define EP0_BUFFER_SIZE                                 0x40
+#define EP1_BUFFER_SIZE                                 0x02
 
 #define USBD_PRODUCT_STRING_FS                          "STM32 Learning Interface"
 #define USBD_MANUFACTURER_STRING                        "STMicroelectronics"
@@ -113,16 +110,16 @@ extern "C" {
 // Utility macros
 #define USB_EP_REG(n)               (*(__IO uint16_t *)(&(USB)->EP0R + ((n) * 2U)))
 
-#define EP_TX_ADDRS(n)              (*((__IO uint16_t *)(0x40006000) + ((n) * 0x8)))
-#define EP_TX_COUNT(n)              (*((__IO uint16_t *)(0x40006004) + ((n) * 0x8)))
-#define EP_RX_ADDRS(n)              (*((__IO uint16_t *)(0x40006008) + ((n) * 0x8)))
-#define EP_RX_COUNT(n)              (*((__IO uint16_t *)(0x4000600C) + ((n) * 0x8)))
 #define MIN(a, b)                   (((a) < (b)) ? (a) : (b))
 
 #define  SWAPBYTE(addr)             (((uint16_t)(*((uint8_t *)(addr)))) + \
                                     (((uint16_t)(*(((uint8_t *)(addr)) + 1U))) << 8U))
 #define  LOBYTE(x)                  ((uint8_t)((x) & 0x00FFU))
 #define  HIBYTE(x)                  ((uint8_t)(((x) & 0xFF00U) >> 8U))
+
+
+#define PMA_ADDR_FROM_APP(n)          (((PMAWord_t*)n - (PMAWord_t*)PMA_BASE_ADDR) << 1)
+#define APP_ADDR_FROM_PMA(n)          ((PMAWord_t*)PMA_BASE_ADDR + (n >> 1))
 
 #define SET_EP_TX_STATUS(bEpNum, wState) \
   do { \
@@ -195,7 +192,7 @@ typedef enum {
     EP_TYPE_INTR
 } EPType_t;
 
-typedef uint16_t                    PMAWord_t;
+typedef uint32_t                    PMAWord_t;
 
 typedef struct {
     uint8_t  request_type;
