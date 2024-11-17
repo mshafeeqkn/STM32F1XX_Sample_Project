@@ -37,6 +37,8 @@ BUILD_DIR = build
 # C sources
 C_SOURCES =  \
 Core/Src/main.c \
+Core/Src/uart.c \
+Core/Src/voltage_monitor.c \
 Core/Src/system_stm32f1xx.c \
 Core/Src/sysmem.c \
 Core/Src/syscalls.c
@@ -90,7 +92,8 @@ AS_DEFS =
 
 # C defines
 C_DEFS =  \
--DSTM32F103x6
+-DSTM32F103x6 \
+-DDEBUG_ENABLE1D
 
 
 # AS includes

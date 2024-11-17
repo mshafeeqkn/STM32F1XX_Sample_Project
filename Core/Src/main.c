@@ -1,3 +1,4 @@
+
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
@@ -18,40 +19,21 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "uart.h"
+#include "voltage_monitor.h"
 
-// Macro defines
-#define TURN_ON_LED()            turn_led_on(TURN_ON)
-#define TURN_OFF_LED()           turn_led_on(TURN_OFF)
-#define TOGGLE_LED()             turn_led_on(TURN_TOGGLE)
+void delay_ms(uint32_t ms) {
+    volatile uint32_t count;
+    const uint32_t iterations_per_ms = 72000;
 
-/**
- * Enumerations
- */
-typedef enum {
-    TURN_OFF,
-    TURN_ON,
-    TURN_TOGGLE
-} LedState_t;
-
-/**
- * @brief Trun the built in LED on/off/toggle
- *
- * @param state - TURN_ON / TURN_OFF / TURN_TOGGLE
- */
-void turn_led_on(LedState_t state) {
-    if(state == TURN_TOGGLE){
-        GPIOC->ODR ^= GPIO_ODR_ODR13;
-    } else if(state == TURN_ON) {
-        GPIOC->ODR &= ~(GPIO_ODR_ODR13);
-    } else {
-        GPIOC->ODR |= GPIO_ODR_ODR13;
+    while (ms--) {
+        count = iterations_per_ms;
+        while (count--) {
+            __NOP();
+        }
     }
 }
 
-/**
- * @brief Configure the system clock as 8MHz using
- * external crystal oscillator.
- */
 void config_sys_clock() {
     // Enable the HSE
     RCC->CR |= RCC_CR_HSEON;
@@ -88,40 +70,16 @@ void config_sys_clock() {
     SystemCoreClockUpdate();
 }
 
-void config_1sec_timer1() {
-    RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
-    TIM1->PSC = 7199;
-    TIM1->ARR = 9999;
-    TIM1->CNT = 0;
-    TIM1->CR1 |= TIM_CR1_CEN;
-}
-
-void config_debug_led() {
-    // Enable clock for GPIOC peripheral
-    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
-
-    // Configure GPIO pin as output
-    GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
-}
-
-void delay_ms(uint16_t ms) {
-    uint32_t ticks = ms * 18000;
-    for(int i = 0; i < ticks; i++);
-}
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
-int main(void) {
+int main(void)
+{
     config_sys_clock();
-    config_1sec_timer1();
-    config_debug_led();
+    init_voltage_monitor();
+    uart1_setup(UART_TX_ENABLE);
 
-    while(1) {
-        while( (TIM1->SR & TIM_SR_UIF) == 0) {}
-        TIM1->SR &= ~(TIM_SR_UIF);
-        TOGGLE_LED();
+    // uart1_send_string("Started");
+    while (1) {
+        measure_current_voltage(2);
+        delay_ms(100);
     }
 }
+
