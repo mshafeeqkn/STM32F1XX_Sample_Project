@@ -46,6 +46,8 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
+#define MESSAGE_ID                  0x102
+#define FILTER_MASK                 0x103
 
 /* USER CODE END EM */
 

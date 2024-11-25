@@ -92,8 +92,8 @@ void can_init() {
 }
 
 void can_config_filter() {
-    const uint32_t message_id = 0x102 << CAN_F0R1_FB21_Pos;
-    const uint32_t filter_mask = 0x103 << CAN_F0R1_FB21_Pos;
+    const uint32_t message_id = MESSAGE_ID << CAN_F0R1_FB21_Pos;
+    const uint32_t filter_mask = FILTER_MASK << CAN_F0R1_FB21_Pos;
 
     // FINIT bit has to be set to initialize CAN filter bank
     // related registers
@@ -133,6 +133,27 @@ void can_start() {
     CAN1->IER |= CAN_IER_FMPIE0;
 }
 
-void can_send_message(uint8_t *data, uint8_t len) {
-    
+void can_send_message(uint8_t *data, uint8_t len, uint16_t std_id) {
+    uint8_t tx_mailbox;
+
+    if(0 != CAN1->TSR & (CAN_TSR_TME0 | CAN_TSR_TME1 | CAN_TSR_TME2)) {
+        // Atleast one transmit mail box is not empty
+
+        // Get the mail box to be used for sending data
+        tx_mailbox = (CAN1->TSR & CAN_TSR_CODE) >> CAN_TSR_CODE_Pos;
+
+        // Set the standard message ID, Set RTR is zero
+        // since we are sending the data rather than requesting.
+        CAN1->sTxMailBox[tx_mailbox].TIR = (std_id << CAN_TI0R_STID_Pos);
+
+        // Set DLC - data length code
+        CAN1->sTxMailBox[tx_mailbox].TDTR = len;
+
+        // Set up the data field
+        CAN1->sTxMailBox[tx_mailbox].TRLR = ((data[1] << CAN_TDL0R_DATA1_Pos) |
+                                             (data[0] << CAN_TDL0R_DATA0_Pos));
+
+        // Request data transmission
+        CAN1->sTxMailBox[tx_mailbox].TIR |= CAN_TI0R_TXRQ;
+    }
 }

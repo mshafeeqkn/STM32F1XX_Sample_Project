@@ -122,7 +122,7 @@ int main(void) {
 
     data[0] = 0x01;
     data[1] = 0x02;
-    can_send_message(data, len);
+    can_send_message(data, len, MESSAGE_ID);
 
     while(1) {
         uart1_send_string("Loop");
