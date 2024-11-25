@@ -1,4 +1,5 @@
 #include "can.h"
+#include "uart.h"
 
 #define SEL_FILTER_BANK             0
 
@@ -16,18 +17,20 @@ void on_std_msg_received() {
     data[1] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA1_Pos;
     data[2] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA2_Pos;
     data[3] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA3_Pos;
-    data[4] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA4_Pos;
-    data[5] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA5_Pos;
-    data[6] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA6_Pos;
-    data[7] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA7_Pos;
+    data[4] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA4_Pos;
+    data[5] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA5_Pos;
+    data[6] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA6_Pos;
+    data[7] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA7_Pos;
 
     // Release the RX FIFO 0
     CAN1->RF0R &= CAN_RF0R_RFOM0;
+
+    uart1_send_string("Msg(id:%d, len: %d) data[0]: %u, data[1]: %u", id, dlc, data[0], data[1]);
 }
 
 void handle_can_message() {
 
-    if(0 != CAN1->IER & CAN_IER_FMPIE0) {
+    if(0 != (CAN1->IER & CAN_IER_FMPIE0)) {
         // FIFO-0 message pending interrupt has enabled
 
         if(CAN1->RF0R & CAN_RF0R_FMP0) {
@@ -35,7 +38,7 @@ void handle_can_message() {
 
             // Get the identifier extension bit and check
             // if the ID is standard or extended mode.
-            if(0 == CAN1->sFIFOMailBox[0].RIR & CAN_RI0R_IDE) {
+            if(0 == (CAN1->sFIFOMailBox[0].RIR & CAN_RI0R_IDE)) {
                 on_std_msg_received();
             }
 
@@ -127,7 +130,7 @@ void can_start() {
     // Request to leave from initialization state
     // and wait until it's acknowleged.
     CAN1->MCR &= ~CAN_MCR_INRQ;
-    while(0 != CAN1->MSR & CAN_MSR_INAK);
+    while(0 != (CAN1->MSR & CAN_MSR_INAK));
 
     // Enable the FIFO-0 message pending interrupt
     CAN1->IER |= CAN_IER_FMPIE0;
@@ -136,7 +139,7 @@ void can_start() {
 void can_send_message(uint8_t *data, uint8_t len, uint16_t std_id) {
     uint8_t tx_mailbox;
 
-    if(0 != CAN1->TSR & (CAN_TSR_TME0 | CAN_TSR_TME1 | CAN_TSR_TME2)) {
+    if(0 != (CAN1->TSR & (CAN_TSR_TME0 | CAN_TSR_TME1 | CAN_TSR_TME2))) {
         // Atleast one transmit mail box is not empty
 
         // Get the mail box to be used for sending data
@@ -150,7 +153,7 @@ void can_send_message(uint8_t *data, uint8_t len, uint16_t std_id) {
         CAN1->sTxMailBox[tx_mailbox].TDTR = len;
 
         // Set up the data field
-        CAN1->sTxMailBox[tx_mailbox].TRLR = ((data[1] << CAN_TDL0R_DATA1_Pos) |
+        CAN1->sTxMailBox[tx_mailbox].TRDR = ((data[1] << CAN_TDL0R_DATA1_Pos) |
                                              (data[0] << CAN_TDL0R_DATA0_Pos));
 
         // Request data transmission
