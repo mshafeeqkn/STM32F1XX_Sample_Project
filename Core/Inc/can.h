@@ -54,6 +54,8 @@ extern "C" {
 /* Exported functions prototypes ---------------------------------------------*/
 void can_init();
 void can_config_filter();
+void can_start();
+void can_send_message(uint8_t *data, uint8_t len, uint16_t std_id);
 
 /* USER CODE BEGIN EFP */
 

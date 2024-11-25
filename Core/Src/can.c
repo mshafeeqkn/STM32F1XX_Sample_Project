@@ -153,7 +153,7 @@ void can_send_message(uint8_t *data, uint8_t len, uint16_t std_id) {
         CAN1->sTxMailBox[tx_mailbox].TDTR = len;
 
         // Set up the data field
-        CAN1->sTxMailBox[tx_mailbox].TRDR = ((data[1] << CAN_TDL0R_DATA1_Pos) |
+        CAN1->sTxMailBox[tx_mailbox].TDLR = ((data[1] << CAN_TDL0R_DATA1_Pos) |
                                              (data[0] << CAN_TDL0R_DATA0_Pos));
 
         // Request data transmission
