@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "uart.h"
+#include "can.h"
 
 // Macro defines
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
@@ -50,7 +51,7 @@ void turn_led_on(LedState_t state) {
 }
 
 /**
- * @brief Configure the system clock as 8MHz using
+ * @brief Configure the system clock as 72MHz using
  * external crystal oscillator.
  */
 void config_sys_clock() {
@@ -111,6 +112,9 @@ int main(void) {
     config_sys_clock();
     config_debug_led();
     uart1_setup(UART_TX_ENABLE);
+
+    can_init();
+    can_config_filter();
 
     while(1) {
         uart1_send_string("Loop");
