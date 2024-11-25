@@ -109,12 +109,20 @@ void delay_ms(uint16_t ms) {
   * @retval int
   */
 int main(void) {
+    uint8_t data[8] = {0};
+    uint8_t len = 2;
+
     config_sys_clock();
     config_debug_led();
     uart1_setup(UART_TX_ENABLE);
 
     can_init();
     can_config_filter();
+    can_start();
+
+    data[0] = 0x01;
+    data[1] = 0x02;
+    can_send_message(data, len);
 
     while(1) {
         uart1_send_string("Loop");

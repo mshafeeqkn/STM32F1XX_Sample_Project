@@ -2,6 +2,55 @@
 
 #define SEL_FILTER_BANK             0
 
+void on_std_msg_received() {
+    uint8_t data[8] = {0};
+
+    // The ID is standard, extract the ID
+    uint16_t id = (CAN_RI0R_STID & CAN1->sFIFOMailBox[0].RIR) >> CAN_TI0R_STID_Pos;
+
+    // Get length of the data (DLC - Data Length Code)
+    uint8_t dlc = (CAN1->sFIFOMailBox[0].RIR & CAN_RDT0R_DLC) >> CAN_RDT0R_DLC_Pos;
+
+    // copy the data
+    data[0] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA0_Pos;
+    data[1] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA1_Pos;
+    data[2] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA2_Pos;
+    data[3] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA3_Pos;
+    data[4] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA4_Pos;
+    data[5] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA5_Pos;
+    data[6] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA6_Pos;
+    data[7] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA7_Pos;
+
+    // Release the RX FIFO 0
+    CAN1->RF0R &= CAN_RF0R_RFOM0;
+}
+
+void handle_can_message() {
+
+    if(0 != CAN1->IER & CAN_IER_FMPIE0) {
+        // FIFO-0 message pending interrupt has enabled
+
+        if(CAN1->RF0R & CAN_RF0R_FMP0) {
+            // There is a pending message in the FIFO
+
+            // Get the identifier extension bit and check
+            // if the ID is standard or extended mode.
+            if(0 == CAN1->sFIFOMailBox[0].RIR & CAN_RI0R_IDE) {
+                on_std_msg_received();
+            }
+
+        }
+    }
+}
+
+ void USB_LP_CAN1_RX0_IRQHandler(void) {
+    handle_can_message();
+ }
+
+void CAN1_RX1_IRQHandler(void) {
+    handle_can_message();
+}
+
 void can_init() {
     uint32_t prio_grp;
 
@@ -72,4 +121,18 @@ void can_config_filter() {
 
     // Leave from the initialization mode
     CAN1->FMR &= ~CAN_FMR_FINIT;
+}
+
+void can_start() {
+    // Request to leave from initialization state
+    // and wait until it's acknowleged.
+    CAN1->MCR &= ~CAN_MCR_INRQ;
+    while(0 != CAN1->MSR & CAN_MSR_INAK);
+
+    // Enable the FIFO-0 message pending interrupt
+    CAN1->IER |= CAN_IER_FMPIE0;
+}
+
+void can_send_message(uint8_t *data, uint8_t len) {
+    
 }
