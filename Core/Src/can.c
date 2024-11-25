@@ -10,22 +10,22 @@ void on_std_msg_received() {
     uint16_t id = (CAN_RI0R_STID & CAN1->sFIFOMailBox[0].RIR) >> CAN_TI0R_STID_Pos;
 
     // Get length of the data (DLC - Data Length Code)
-    uint8_t dlc = (CAN1->sFIFOMailBox[0].RIR & CAN_RDT0R_DLC) >> CAN_RDT0R_DLC_Pos;
+    uint8_t dlc = ((CAN1->sFIFOMailBox[0].RDTR & CAN_RDT0R_DLC) >> CAN_RDT0R_DLC_Pos);
 
     // copy the data
-    data[0] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA0_Pos;
-    data[1] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA1_Pos;
-    data[2] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA2_Pos;
-    data[3] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA3_Pos;
-    data[4] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA4_Pos;
-    data[5] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA5_Pos;
-    data[6] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA6_Pos;
-    data[7] = (uint8_t)(CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA7_Pos;
+    data[0] = (uint8_t)((CAN_RDL0R_DATA0 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA0_Pos);
+    data[1] = (uint8_t)((CAN_RDL0R_DATA1 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA1_Pos);
+    data[2] = (uint8_t)((CAN_RDL0R_DATA2 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA2_Pos);
+    data[3] = (uint8_t)((CAN_RDL0R_DATA3 & CAN1->sFIFOMailBox[0].RDLR) >> CAN_RDL0R_DATA3_Pos);
+    data[4] = (uint8_t)((CAN_RDH0R_DATA4 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA4_Pos);
+    data[5] = (uint8_t)((CAN_RDH0R_DATA5 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA5_Pos);
+    data[6] = (uint8_t)((CAN_RDH0R_DATA6 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA6_Pos);
+    data[7] = (uint8_t)((CAN_RDH0R_DATA7 & CAN1->sFIFOMailBox[0].RDHR) >> CAN_RDH0R_DATA7_Pos);
 
     // Release the RX FIFO 0
-    CAN1->RF0R &= CAN_RF0R_RFOM0;
+    CAN1->RF0R |= CAN_RF0R_RFOM0;
 
-    uart1_send_string("Msg(id:%d, len: %d) data[0]: %u, data[1]: %u", id, dlc, data[0], data[1]);
+    uart1_send_string("Msg(id:%X, len: %d) data[0]: %u, data[1]: %u", id, dlc, data[0], data[1]);
 }
 
 void handle_can_message() {

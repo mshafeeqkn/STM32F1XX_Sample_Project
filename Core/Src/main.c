@@ -125,6 +125,6 @@ int main(void) {
     can_send_message(data, len, MESSAGE_ID);
 
     while(1) {
-        uart1_send_string("Loop");
+        // uart1_send_string("Loop");
     }
 }
