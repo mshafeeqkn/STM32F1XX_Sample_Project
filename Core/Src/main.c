@@ -97,6 +97,7 @@ void config_debug_led() {
     // Configure GPIO pin as output
     GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+    TURN_OFF_LED();
 }
 
 void delay_ms(uint16_t ms) {
@@ -112,19 +113,23 @@ int main(void) {
     uint8_t data[8] = {0};
     uint8_t len = 2;
 
+    // Basic setup, enable system clock, debug LED
+    // and the serial console
     config_sys_clock();
     config_debug_led();
     uart1_setup(UART_TX_ENABLE);
 
+    // Intiailize the CAN module, configure the filter
+    // and start the CAN module
     can_init();
     can_config_filter();
     can_start();
 
+    // Send the data to the remote (loopback)
     data[0] = 0x01;
     data[1] = 0x02;
     can_send_message(data, len, MESSAGE_ID);
 
     while(1) {
-        // uart1_send_string("Loop");
     }
 }
