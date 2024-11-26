@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "uart.h"
+#include "timer1.h"
 
 // Macro defines
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
@@ -96,6 +97,8 @@ void config_debug_led() {
     // Configure GPIO pin as output
     GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+
+    // TURN_OFF_LED();
 }
 
 void delay_ms(uint16_t ms) {
@@ -112,7 +115,9 @@ int main(void) {
     config_debug_led();
     uart1_setup(UART_TX_ENABLE);
 
+    configure_timer1_cc1();
+
     while(1) {
-        uart1_send_string("Loop");
+        // uart1_send_string("Loop");
     }
 }
