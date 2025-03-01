@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "uart.h"
 
 // Macro defines
 #define TURN_ON_LED()            turn_led_on(TURN_ON)
@@ -50,7 +49,7 @@ void turn_led_on(LedState_t state) {
 }
 
 /**
- * @brief Configure the system clock as 8MHz using
+ * @brief Configure the system clock as 72MHz using
  * external crystal oscillator.
  */
 void config_sys_clock() {
@@ -77,7 +76,7 @@ void config_sys_clock() {
     // Set the PLL as system clock source
     RCC->CFGR &= ~RCC_CFGR_SW;
     RCC->CFGR |= RCC_CFGR_SW_PLL;
-    while(0 == (RCC->CFGR & RCC_CFGR_SWS_PLL));
+    while(RCC_CFGR_SWS_PLL != (RCC->CFGR & RCC_CFGR_SWS_PLL));
 
     // Configure AHB and APB prescaler
     RCC->CFGR |= RCC_CFGR_HPRE_DIV1;            // AHB prescaler
@@ -96,11 +95,87 @@ void config_debug_led() {
     // Configure GPIO pin as output
     GPIOC->CRH &= ~(GPIO_CRH_CNF13 | GPIO_CRH_MODE13);  // Clear configuration
     GPIOC->CRH |= GPIO_CRH_MODE13_0;  // Set pin mode to general purpose output (max speed 10 MHz)
+
+    // TURN_OFF_LED();
 }
 
 void delay_ms(uint16_t ms) {
-    uint32_t ticks = ms * 18000;
-    for(int i = 0; i < ticks; i++);
+    // Simple delay function (not accurate, just for demonstration)
+    for (volatile uint32_t i = 0; i < ms * 1000; ++i) {
+        __NOP();  // No operation (compiler barrier)
+    }
+}
+
+static void can_init() {
+    // Enable clock for CAN and port B
+    // We are using alternate pins for CAN since
+    // the default pin may interfer with the USB
+    RCC->APB1ENR |= RCC_APB1ENR_CAN1EN;
+    RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
+    RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
+
+    // PB8 - CAN RX and PB9 - CAN TX
+    // Remap CAN pins
+    // CAN RX should be configured as floating
+    // input pin. All pins are floating input mode
+    // by default.
+    // CAN TX pin should be configured as alternate
+    // function output push-pull. High speed
+    GPIOB->CRH &= ~(GPIO_CRH_CNF9 | GPIO_CRH_MODE9);
+    GPIOB->CRH |= (GPIO_CRH_CNF9_1 | GPIO_CRH_MODE9);
+
+    // Remap the CAN pins
+    AFIO->MAPR |= AFIO_MAPR_CAN_REMAP_REMAP2;
+
+    // Request CAN initialization
+    CAN1->MCR |= CAN_MCR_INRQ;
+    while((CAN1->MSR & CAN_MSR_INAK) == 0);
+
+    // Exit from sleep mode
+    CAN1->MCR &= ~CAN_MCR_SLEEP;
+    while((CAN1->MSR & CAN_MSR_SLAK) != 0);
+
+    // Disable automatic re-transmission
+    CAN1->MCR |= CAN_MCR_NART;
+
+    // Configure Bit timing register
+    // disable silent and loopback mode (ie normal mode)
+    CAN1->BTR &= ~(CAN_BTR_SILM | CAN_BTR_LBKM);
+
+    // Sync jump width as 1 time quanta, SJW = 0
+    CAN1->BTR &= ~(CAN_BTR_SJW);
+
+    // Time segment 2 - 1tq
+    CAN1->BTR &= ~(CAN_BTR_TS2);
+
+    // Time segment 1 - 2tq
+    CAN1->BTR &= ~(CAN_BTR_TS1);
+    CAN1->BTR |= CAN_BTR_TS1_0;
+
+    // Set prescalar 72
+    CAN1->BTR |= (72 - 1);
+}
+
+void can_start() {
+    // Request to leave init state
+    CAN1->MCR &= ~(CAN_MCR_INRQ);
+    while((CAN1->MSR & CAN_MSR_INAK) != 0);
+}
+
+void can_send_byte(uint8_t byte) {
+    uint32_t tsr = CAN1->TSR;
+    uint8_t tx_mailbox;
+
+    if((0 != (tsr & CAN_TSR_TME0)) ||
+       (0 != (tsr & CAN_TSR_TME1)) ||
+       (0 != (tsr & CAN_TSR_TME2))) {
+        tx_mailbox = ((tsr & CAN_TSR_CODE) >> CAN_TSR_CODE_Pos);
+        CAN1->sTxMailBox[tx_mailbox].TIR = (0x6A5 << CAN_TI0R_STID_Pos);
+        CAN1->sTxMailBox[tx_mailbox].TDTR = 8;
+        CAN1->sTxMailBox[tx_mailbox].TDHR = byte | byte << 8 | byte << 16 | byte << 24;
+        CAN1->sTxMailBox[tx_mailbox].TDLR = byte | byte << 8 | byte << 16 | byte << 24;
+        CAN1->sTxMailBox[tx_mailbox].TIR |= CAN_TI0R_TXRQ;
+    }
 }
 
 /**
@@ -108,11 +183,17 @@ void delay_ms(uint16_t ms) {
   * @retval int
   */
 int main(void) {
+    uint8_t d = 'A';
     config_sys_clock();
     config_debug_led();
-    uart1_setup(UART_TX_ENABLE);
+
+    can_init();
+    can_start();
 
     while(1) {
-        uart1_send_string("Loop");
+        d ^= 'B';
+        can_send_byte(d);
+        delay_ms(1000);
+        TOGGLE_LED();
     }
 }
